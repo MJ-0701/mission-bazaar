@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="brand">
+            <h1 class="brand-title"><?= appTitle ?> 관리자</h1>
+            <p class="brand-subtitle">입금 확인, 준비 완료, 수령 완료를 처리합니다. 5초마다 자동 갱신됩니다.</p>
+          </div>
+          <nav class="page-actions">
+            <a class="button secondary" href="<?= webAppUrl ?>">주문 화면</a>
+            <a class="button secondary" href="<?= webAppUrl ?>?page=pickup">픽업 화면</a>
+            <button id="logoutButton" class="button secondary is-hidden" type="button">로그아웃</button>
+          </nav>
+        </div>
+      </header>
+
+      <main class="container admin-layout">
+        <section id="loginPanel" class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">관리자 로그인</h2>
+          </div>
+          <div class="panel-body">
+            <form id="loginForm" class="form-grid">
+              <div class="field">
+                <label for="adminPin">관리자 PIN</label>
+                <input id="adminPin" inputmode="numeric" autocomplete="current-password" required>
+              </div>
+              <button id="loginButton" class="button" type="submit">들어가기</button>
+              <p id="loginMessage" class="notice is-hidden" role="alert"></p>
+            </form>
+          </div>
+        </section>
+
+        <section id="adminPanel" class="admin-layout is-hidden">
+          <section class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">운영판</h2>
+              <span id="updatedAt" class="brand-subtitle"></span>
+            </div>
+            <div class="panel-body admin-layout">
+              <div class="toolbar">
+                <div class="field">
+                  <label for="searchInput">검색</label>
+                  <input id="searchInput" placeholder="주문번호, 픽업자명">
+                </div>
+                <div class="field">
+                  <label for="statusFilter">상태</label>
+                  <select id="statusFilter">
+                    <option value="">전체</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="teamFilter">팀</label>
+                  <select id="teamFilter">
+                    <option value="">전체</option>
+                  </select>
+                </div>
+                <button id="refreshButton" class="button secondary" type="button">새로고침</button>
+              </div>
+              <div id="stats" class="stats"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">주문 목록</h2>
+            </div>
+            <div class="panel-body">
+              <div id="orderTable" class="order-table" aria-live="polite"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">메뉴 품절 관리</h2>
+            </div>
+            <div class="panel-body">
+              <div id="menuAdminList" class="menu-admin-teams"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const PERF_LOG_ENABLED = true;
+      const state = {
+        pin: '',
+        orders: [],
+        menus: [],
+        teams: [],
+        admin: null,
+        stats: {},
+        labels: {},
+        transitions: {},
+        filter: '',
+        teamFilter: '',
+        search: '',
+        isRefreshing: false
+      };
+
+      const statusClass = {
+        PAYMENT_PENDING: 'pending',
+        PAYMENT_CHECKING: 'pending',
+        PAID: 'paid',
+        READY: 'ready',
+        COMPLETE: '',
+        PAYMENT_ISSUE: 'issue',
+        CANCELED: 'canceled'
+      };
+
+      const actionLabels = {
+        PAYMENT_CHECKING: '확인중',
+        PAID: '입금확인',
+        READY: '준비완료',
+        COMPLETE: '수령완료',
+        PAYMENT_ISSUE: '입금문제',
+        CANCELED: '취소',
+        PAYMENT_PENDING: '대기복구'
+      };
+
+      const el = {
+        loginPanel: document.getElementById('loginPanel'),
+        adminPanel: document.getElementById('adminPanel'),
+        loginForm: document.getElementById('loginForm'),
+        adminPin: document.getElementById('adminPin'),
+        loginButton: document.getElementById('loginButton'),
+        loginMessage: document.getElementById('loginMessage'),
+        updatedAt: document.getElementById('updatedAt'),
+        searchInput: document.getElementById('searchInput'),
+        statusFilter: document.getElementById('statusFilter'),
+        teamFilter: document.getElementById('teamFilter'),
+        refreshButton: document.getElementById('refreshButton'),
+        logoutButton: document.getElementById('logoutButton'),
+        stats: document.getElementById('stats'),
+        orderTable: document.getElementById('orderTable'),
+        menuAdminList: document.getElementById('menuAdminList')
+      };
+
+      function perfNow() {
+        return window.performance && performance.now ? performance.now() : Date.now();
+      }
+
+      function perfLog(name, startedAt, extra = {}) {
+        if (!PERF_LOG_ENABLED) return;
+        const event = {
+          kind: 'perf',
+          page: 'admin',
+          name,
+          ms: Math.round((perfNow() - startedAt) * 10) / 10,
+          ...extra
+        };
+        console.log('[PERF]', event);
+      }
+
+      function callServer(method, payload) {
+        const startedAt = perfNow();
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler((result) => {
+              perfLog(`server.${method}`, startedAt, { ok: true });
+              resolve(result);
+            })
+            .withFailureHandler((error) => {
+              perfLog(`server.${method}`, startedAt, { ok: false, error: error.message || String(error) });
+              reject(error);
+            })[method](payload);
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function money(value) {
+        return `${Number(value || 0).toLocaleString('ko-KR')}원`;
+      }
+
+      function showLoginMessage(message, type = 'danger') {
+        el.loginMessage.textContent = message;
+        el.loginMessage.className = `notice ${type}`;
+      }
+
+      function applySnapshot(snapshot) {
+        const hasMenus = Array.isArray(snapshot.menus);
+        const hasTeams = Array.isArray(snapshot.teams);
+        const hasLabels = !!snapshot.statusLabels;
+        state.orders = snapshot.orders || state.orders || [];
+        state.menus = snapshot.menus || state.menus || [];
+        state.teams = snapshot.teams || state.teams || [];
+        state.admin = snapshot.admin || state.admin || null;
+        state.stats = snapshot.stats || state.stats || {};
+        state.labels = snapshot.statusLabels || state.labels || {};
+        state.transitions = snapshot.transitions || state.transitions || {};
+        const scope = state.admin && state.admin.teamName ? state.admin.teamName : '관리자';
+        el.updatedAt.textContent = snapshot.updatedAt ? `${scope} · 갱신 ${snapshot.updatedAt}` : scope;
+        if (hasLabels) renderStatusFilter();
+        if (hasTeams) renderTeamFilter();
+        renderStats();
+        renderOrders();
+        if (hasMenus) renderMenus();
+      }
+
+      function renderStatusFilter() {
+        const selected = el.statusFilter.value;
+        el.statusFilter.innerHTML = '<option value="">전체</option>' +
+          Object.keys(state.labels).map((status) => `
+            <option value="${escapeHtml(status)}">${escapeHtml(state.labels[status])}</option>
+          `).join('');
+        el.statusFilter.value = selected;
+      }
+
+      function renderTeamFilter() {
+        const selected = el.teamFilter.value;
+        el.teamFilter.innerHTML = '<option value="">전체</option>' +
+          state.teams.map((team) => `
+            <option value="${escapeHtml(team.teamId)}">${escapeHtml(team.teamName)}</option>
+          `).join('');
+        el.teamFilter.value = selected;
+      }
+
+      function renderStats() {
+        const statusStats = Object.keys(state.labels).map((status) => `
+          <span class="badge ${statusClass[status] || ''}">
+            ${escapeHtml(state.labels[status])} ${state.stats[status] || 0}
+          </span>
+        `).join('');
+        const teamStats = state.teams.map((team) => {
+          const count = state.orders.filter((order) => order.teamId === team.teamId).length;
+          return `<span class="badge">${escapeHtml(team.teamName)} ${count}</span>`;
+        }).join('');
+        el.stats.innerHTML = teamStats + statusStats;
+      }
+
+      function filteredOrders() {
+        const query = state.search.trim().toLowerCase();
+        return state.orders.filter((order) => {
+          if (state.filter && order.status !== state.filter) return false;
+          if (state.teamFilter && order.teamId !== state.teamFilter) return false;
+          if (!query) return true;
+          return [
+            order.orderId,
+            order.teamName,
+            order.pickupName,
+            order.phone,
+            order.itemsText
+          ].join(' ').toLowerCase().includes(query);
+        });
+      }
+
+      function renderOrders() {
+        const orders = filteredOrders();
+        if (!orders.length) {
+          el.orderTable.innerHTML = '<div class="empty-state">표시할 주문이 없습니다.</div>';
+          return;
+        }
+
+        el.orderTable.innerHTML = orders.map((order) => `
+          <article class="order-row" data-order-id="${escapeHtml(order.orderId)}">
+            <div>
+              <p class="order-id">${escapeHtml(order.orderId)}</p>
+              <span class="badge">${escapeHtml(order.teamName)}</span>
+              <span class="badge ${statusClass[order.status] || ''}">${escapeHtml(order.statusLabel)}</span>
+              <p class="order-items"><strong>${money(order.totalAmount)}</strong></p>
+            </div>
+            <div class="order-main">
+              <div class="order-meta">
+                <span>픽업자 ${escapeHtml(order.pickupName)}</span>
+                ${order.phone ? `<span>연락처 ${escapeHtml(order.phone)}</span>` : ''}
+              </div>
+              <p class="order-items">${escapeHtml(order.itemsText)}</p>
+              ${order.memo ? `<p class="notice">${escapeHtml(order.memo)}</p>` : ''}
+              ${order.adminNote ? `<p class="notice warn">${escapeHtml(order.adminNote)}</p>` : ''}
+            </div>
+            <div class="order-actions">
+              ${renderOrderActions(order)}
+            </div>
+          </article>
+        `).join('');
+      }
+
+      function renderOrderActions(order) {
+        const nextStatuses = (state.transitions[order.status] || []).slice(0, 1);
+        if (!nextStatuses.length) {
+          return '<span class="brand-subtitle">처리 완료</span>';
+        }
+
+        return nextStatuses.map((status) => {
+          const label = actionLabels[status] || status;
+          const tone = status === 'CANCELED' ? 'danger' : status === 'PAYMENT_ISSUE' ? 'warn' : status === 'COMPLETE' ? 'secondary' : '';
+          return `<button class="button ${tone}" type="button" data-action="status" data-order-id="${escapeHtml(order.orderId)}" data-team-id="${escapeHtml(order.teamId)}" data-status="${escapeHtml(status)}">${escapeHtml(label)}</button>`;
+        }).join('');
+      }
+
+      function renderMenus() {
+        if (!state.menus.length) {
+          el.menuAdminList.innerHTML = '<div class="empty-state">등록된 메뉴가 없습니다.</div>';
+          return;
+        }
+
+        const groups = state.teams.map((team) => ({
+          team,
+          menus: state.menus.filter((menu) => menu.teamId === team.teamId)
+        })).filter((group) => group.menus.length);
+
+        el.menuAdminList.innerHTML = groups.map((group) => `
+          <section class="menu-admin-team">
+            <h3 class="team-title">${escapeHtml(group.team.teamName)}</h3>
+            <div class="menu-admin-list">
+              ${group.menus.map((menu) => `
+                <article class="menu-admin-item">
+                  <div>
+                    <strong>${escapeHtml(menu.name)}</strong>
+                    <div class="order-meta">
+                      <span>${escapeHtml(menu.category)}</span>
+                      <span>${money(menu.price)}</span>
+                    </div>
+                  </div>
+                  <div class="switch-row">
+                    <span class="badge ${menu.isAvailable ? 'ready' : 'canceled'}">${menu.isAvailable ? '판매중' : '품절'}</span>
+                    <button class="button secondary" type="button" data-action="menu" data-menu-id="${escapeHtml(menu.menuId)}" data-available="${menu.isAvailable ? 'false' : 'true'}">
+                      ${menu.isAvailable ? '품절 처리' : '판매 재개'}
+                    </button>
+                  </div>
+                </article>
+              `).join('')}
+            </div>
+          </section>
+        `).join('');
+      }
+
+      async function login(event) {
+        if (event) {
+          event.preventDefault();
+        }
+        el.loginButton.disabled = true;
+        el.loginButton.textContent = '확인 중';
+        state.pin = el.adminPin.value.trim();
+
+        try {
+          const snapshot = await callServer('getAdminBootstrap', { pin: state.pin });
+          localStorage.setItem('missionBazaarAdminPin', state.pin);
+          el.loginPanel.classList.add('is-hidden');
+          el.adminPanel.classList.remove('is-hidden');
+          el.logoutButton.classList.remove('is-hidden');
+          applySnapshot(snapshot);
+        } catch (error) {
+          showLoginMessage(error.message || String(error));
+        } finally {
+          el.loginButton.disabled = false;
+          el.loginButton.textContent = '들어가기';
+        }
+      }
+
+      function logout() {
+        localStorage.removeItem('missionBazaarAdminPin');
+        state.pin = '';
+        state.orders = [];
+        state.menus = [];
+        state.teams = [];
+        state.admin = null;
+        state.stats = {};
+        state.filter = '';
+        state.teamFilter = '';
+        state.search = '';
+        state.isRefreshing = false;
+
+        el.adminPin.value = '';
+        el.searchInput.value = '';
+        el.statusFilter.value = '';
+        el.teamFilter.value = '';
+        el.loginPanel.classList.remove('is-hidden');
+        el.adminPanel.classList.add('is-hidden');
+        el.logoutButton.classList.add('is-hidden');
+        showLoginMessage('로그아웃했습니다. 다른 PIN으로 다시 들어갈 수 있습니다.', 'success');
+        el.adminPin.focus();
+      }
+
+      async function refresh() {
+        if (!state.pin) return;
+        if (state.isRefreshing) return;
+        state.isRefreshing = true;
+        try {
+          const snapshot = await callServer('refreshAdminOrders', { pin: state.pin });
+          applySnapshot(snapshot);
+        } finally {
+          state.isRefreshing = false;
+        }
+      }
+
+      async function updateStatus(orderId, teamId, nextStatus) {
+        const order = state.orders.find((item) => item.orderId === orderId && item.teamId === teamId);
+        if (!order) return;
+        if (nextStatus === 'CANCELED' && !confirm(`${orderId} 주문을 취소할까요?`)) return;
+
+        const adminNote = nextStatus === 'PAID'
+          ? `입금/현금 확인 ${money(order.totalAmount)}`
+          : (order.adminNote || '');
+
+        const snapshot = await callServer('adminUpdateOrderStatus', {
+          pin: state.pin,
+          orderId,
+          teamId,
+          status: nextStatus,
+          adminNote,
+          paymentMethod: nextStatus === 'PAID' ? (order.paymentMethod || 'TRANSFER') : order.paymentMethod
+        });
+        applySnapshot(snapshot);
+      }
+
+      async function updateMenu(menuId, isAvailable) {
+        const result = await callServer('adminUpdateMenuAvailability', {
+          pin: state.pin,
+          menuId,
+          isAvailable
+        });
+        state.menus = result.menus || [];
+        renderMenus();
+      }
+
+      el.loginForm.addEventListener('submit', login);
+      el.refreshButton.addEventListener('click', () => refresh().catch((error) => showLoginMessage(error.message || String(error))));
+      el.logoutButton.addEventListener('click', logout);
+      el.searchInput.addEventListener('input', () => {
+        state.search = el.searchInput.value;
+        renderOrders();
+      });
+      el.statusFilter.addEventListener('change', () => {
+        state.filter = el.statusFilter.value;
+        renderOrders();
+      });
+      el.teamFilter.addEventListener('change', () => {
+        state.teamFilter = el.teamFilter.value;
+        renderOrders();
+      });
+      el.orderTable.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-action="status"]');
+        if (!button) return;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = '처리 중';
+        updateStatus(button.dataset.orderId, button.dataset.teamId, button.dataset.status)
+          .catch((error) => alert(error.message || error))
+          .finally(() => {
+            button.disabled = false;
+            button.textContent = originalText;
+          });
+      });
+      el.menuAdminList.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-action="menu"]');
+        if (!button) return;
+        updateMenu(button.dataset.menuId, button.dataset.available === 'true').catch((error) => alert(error.message || error));
+      });
+
+      const savedPin = localStorage.getItem('missionBazaarAdminPin');
+      if (savedPin) {
+        el.adminPin.value = savedPin;
+        login().catch((error) => showLoginMessage(error.message || String(error)));
+      }
+
+      setInterval(() => {
+        if (!el.adminPanel.classList.contains('is-hidden')) {
+          refresh().catch(() => {});
+        }
+      }, 5000);
+    </script>
+  </body>
+</html>

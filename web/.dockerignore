@@ -1,0 +1,5 @@
+.next
+node_modules
+test-artifacts
+tsconfig.tsbuildinfo
+.env.local

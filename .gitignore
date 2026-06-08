@@ -1,0 +1,20 @@
+infra/azure/container-app.env
+infra/azure/*.local.env
+.env
+.env.local
+
+# Local IDE / generated files
+.idea/
+outputs/
+node_modules
+
+# Web build outputs
+web/.next/
+web/out/
+web/node_modules/
+web/test-artifacts/
+web/tsconfig.tsbuildinfo
+web/.env.local
+
+# OS noise
+.DS_Store

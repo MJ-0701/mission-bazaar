@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="brand">
+            <h1 class="brand-title"><?= appTitle ?></h1>
+            <p class="brand-subtitle">메뉴 선택 후 송금하면 운영팀이 입금을 확인합니다.</p>
+          </div>
+          <nav class="page-actions">
+          </nav>
+        </div>
+      </header>
+
+      <main class="container">
+        <div class="layout">
+          <section class="panel" aria-labelledby="menu-title">
+            <div class="panel-header">
+              <h2 id="menu-title" class="panel-title">메뉴</h2>
+              <button id="reloadButton" class="button secondary" type="button">새로고침</button>
+            </div>
+            <div class="panel-body">
+              <div id="menuList" aria-live="polite">
+                <div class="empty-state">메뉴를 불러오는 중입니다.</div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="panel" aria-labelledby="checkout-title">
+            <div class="panel-header">
+              <h2 id="checkout-title" class="panel-title">주문</h2>
+            </div>
+            <div class="panel-body">
+              <form id="orderForm" class="form-grid">
+                <div>
+                  <p class="section-title">선택 팀</p>
+                  <p id="selectedTeamLabel" class="notice">팀을 불러오는 중입니다.</p>
+                  <ul id="cartList" class="summary-list"></ul>
+                  <div class="total-row">
+                    <span>총액</span>
+                    <strong id="totalAmount">0원</strong>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="pickupName">픽업자명</label>
+                  <input id="pickupName" name="pickupName" autocomplete="name" maxlength="40" required>
+                </div>
+
+                <div class="field">
+                  <label for="phone">연락처</label>
+                  <input id="phone" name="phone" inputmode="tel" autocomplete="tel" maxlength="30" required>
+                </div>
+
+                <div class="field">
+                  <label for="memo">요청사항 선택</label>
+                  <textarea id="memo" name="memo" maxlength="300"></textarea>
+                </div>
+
+                <button id="submitOrder" class="button full" type="submit" disabled>주문 생성</button>
+                <p id="formMessage" class="notice is-hidden" role="alert"></p>
+              </form>
+
+              <section id="orderResult" class="order-result" aria-live="polite">
+                <div class="notice">
+                  입금할 때 주문번호와 픽업자명을 함께 적어주세요.<br>
+                  예: <strong id="payerExample">A000 이름</strong>
+                </div>
+
+                <div>
+                  <p class="section-title">주문번호</p>
+                  <div id="orderNumber" class="order-number">A000</div>
+                </div>
+
+                <div class="notice">
+                  <strong id="paymentTotal">0원</strong><br>
+                  <span id="paymentAccount">계좌 정보를 설정해주세요.</span>
+                </div>
+
+                <img id="qrImage" class="qr-image is-hidden" alt="송금 QR 코드">
+
+                <div class="notice">
+                  현재 상태: <strong id="statusLabel">입금 대기</strong>
+                </div>
+
+                <div class="form-grid">
+                  <button id="paidButton" class="button full" type="button">입금했어요</button>
+                  <button id="refreshOrderButton" class="button secondary full" type="button">상태 새로고침</button>
+                  <button id="newOrderButton" class="button secondary full" type="button">새 주문 시작</button>
+                </div>
+              </section>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+    <a id="pickupBaseLink" class="is-hidden" href="<?= webAppUrl ?>?page=pickup" target="_top" tabindex="-1" aria-hidden="true"></a>
+
+    <script>
+      const INITIAL_BOOTSTRAP = <?!= initialBootstrapJson ?>;
+      const PERF_LOG_ENABLED = true;
+      const CLIENT_BUILD = 'pickup-hybrid-sync-v2';
+      console.log('[BUILD]', { page: 'customer', build: CLIENT_BUILD });
+      let usedInitialBootstrap = false;
+
+      const state = {
+        menus: [],
+        teams: [],
+        cart: {},
+        order: null,
+        settings: null
+      };
+
+      const el = {
+        menuList: document.getElementById('menuList'),
+        selectedTeamLabel: document.getElementById('selectedTeamLabel'),
+        cartList: document.getElementById('cartList'),
+        totalAmount: document.getElementById('totalAmount'),
+        orderForm: document.getElementById('orderForm'),
+        submitOrder: document.getElementById('submitOrder'),
+        formMessage: document.getElementById('formMessage'),
+        orderResult: document.getElementById('orderResult'),
+        orderNumber: document.getElementById('orderNumber'),
+        paymentTotal: document.getElementById('paymentTotal'),
+        paymentAccount: document.getElementById('paymentAccount'),
+        qrImage: document.getElementById('qrImage'),
+        statusLabel: document.getElementById('statusLabel'),
+        payerExample: document.getElementById('payerExample'),
+        paidButton: document.getElementById('paidButton'),
+        refreshOrderButton: document.getElementById('refreshOrderButton'),
+        newOrderButton: document.getElementById('newOrderButton'),
+        reloadButton: document.getElementById('reloadButton'),
+        pickupBaseLink: document.getElementById('pickupBaseLink'),
+        pickupName: document.getElementById('pickupName'),
+        phone: document.getElementById('phone'),
+        memo: document.getElementById('memo')
+      };
+
+      function perfNow() {
+        return window.performance && performance.now ? performance.now() : Date.now();
+      }
+
+      function perfLog(name, startedAt, extra = {}) {
+        if (!PERF_LOG_ENABLED) return;
+        const event = {
+          kind: 'perf',
+          page: 'customer',
+          build: CLIENT_BUILD,
+          name,
+          ms: Math.round((perfNow() - startedAt) * 10) / 10,
+          ...extra
+        };
+        console.log('[PERF]', event);
+      }
+
+      function callServer(method, payload) {
+        const startedAt = perfNow();
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler((result) => {
+              perfLog(`server.${method}`, startedAt, { ok: true });
+              resolve(result);
+            })
+            .withFailureHandler((error) => {
+              perfLog(`server.${method}`, startedAt, { ok: false, error: error.message || String(error) });
+              reject(error);
+            })[method](payload);
+        });
+      }
+
+      function money(value) {
+        return `${Number(value || 0).toLocaleString('ko-KR')}원`;
+      }
+
+      function pickupUrl(order) {
+        const url = new URL(el.pickupBaseLink.href);
+        url.searchParams.set('page', 'pickup');
+        if (order && order.orderId && order.orderToken) {
+          url.searchParams.set('orderId', order.orderId);
+          url.searchParams.set('token', order.orderToken);
+        }
+        return url.toString();
+      }
+
+      function paymentCheckingUrl(action) {
+        const url = new URL(el.pickupBaseLink.href);
+        url.searchParams.delete('page');
+        url.searchParams.set('action', action);
+        url.searchParams.set('t', String(Date.now()));
+        return url;
+      }
+
+      function sendPaymentCheckingBeacon(order) {
+        if (!order || !order.orderId || !order.orderToken) return;
+
+        const body = new URLSearchParams();
+        body.set('orderId', order.orderId);
+        body.set('orderToken', order.orderToken);
+
+        try {
+          if (navigator.sendBeacon && navigator.sendBeacon(paymentCheckingUrl('markPaymentCheckingFast').toString(), body)) {
+            return;
+          }
+        } catch (error) {
+          // Fall through to fetch/image below. The pickup screen will keep polling.
+        }
+
+        const url = paymentCheckingUrl('markPaymentCheckingBeacon');
+        url.searchParams.set('orderId', order.orderId);
+        url.searchParams.set('orderToken', order.orderToken);
+
+        try {
+          fetch(url.toString(), {
+            method: 'GET',
+            mode: 'no-cors',
+            credentials: 'omit',
+            cache: 'no-store',
+            keepalive: true
+          }).catch(() => {});
+        } catch (error) {
+          const image = new Image();
+          image.src = url.toString();
+        }
+      }
+
+      function navigateTop(url) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_top';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function getCartItems() {
+        return Object.keys(state.cart)
+          .filter((menuId) => state.cart[menuId] > 0)
+          .map((menuId) => ({ menuId, quantity: state.cart[menuId] }));
+      }
+
+      function getMenu(menuId) {
+        return state.menus.find((menu) => menu.menuId === menuId);
+      }
+
+      function cartTotal() {
+        return getCartItems().reduce((sum, item) => {
+          const menu = getMenu(item.menuId);
+          return sum + (menu ? menu.price * item.quantity : 0);
+        }, 0);
+      }
+
+      function groupMenusByCategory(menus) {
+        return menus.reduce((groups, menu) => {
+          const category = menu.category || '기타';
+          if (!groups[category]) groups[category] = [];
+          groups[category].push(menu);
+          return groups;
+        }, {});
+      }
+
+      function groupMenusByTeam(menus) {
+        return state.teams.map((team) => ({
+          team,
+          menus: menus.filter((menu) => menu.teamId === team.teamId)
+        })).filter((group) => group.menus.length);
+      }
+
+      function renderMenus() {
+        if (!state.menus.length) {
+          el.menuList.innerHTML = '<div class="empty-state">등록된 메뉴가 없습니다.</div>';
+          return;
+        }
+
+        const teamGroups = groupMenusByTeam(state.menus);
+        el.menuList.innerHTML = teamGroups.map(({ team, menus }) => {
+          const categoryGroups = groupMenusByCategory(menus);
+          return `
+          <section class="menu-section">
+            <h3 class="team-title">${escapeHtml(team.teamName)}</h3>
+            ${Object.keys(categoryGroups).map((category) => `
+              <h4 class="section-title">${escapeHtml(category)}</h4>
+              <div class="menu-grid">
+                ${categoryGroups[category].map(renderMenuCard).join('')}
+              </div>
+            `).join('')}
+          </section>
+        `;
+        }).join('');
+      }
+
+      function renderMenuCard(menu) {
+        const quantity = state.cart[menu.menuId] || 0;
+        const soldOut = !menu.isAvailable;
+        return `
+          <article class="menu-card ${soldOut ? 'is-sold-out' : ''}">
+            <div>
+              <h4 class="menu-name">${escapeHtml(menu.name)}</h4>
+              <div class="menu-meta">
+                <span class="price">${money(menu.price)}</span>
+                ${soldOut ? '<span class="badge canceled">품절</span>' : '<span class="badge ready">판매중</span>'}
+              </div>
+            </div>
+            <div class="qty-control" aria-label="${escapeHtml(menu.name)} 수량">
+              <button type="button" data-menu-id="${escapeHtml(menu.menuId)}" data-delta="-1" ${quantity <= 0 ? 'disabled' : ''}>-</button>
+              <output>${quantity}</output>
+              <button type="button" data-menu-id="${escapeHtml(menu.menuId)}" data-delta="1" ${soldOut ? 'disabled' : ''}>+</button>
+            </div>
+          </article>
+        `;
+      }
+
+      function renderCart() {
+        const items = getCartItems();
+        const teamNames = Array.from(new Set(items.map((item) => {
+          const menu = getMenu(item.menuId);
+          return menu ? menu.teamName : '';
+        }).filter(Boolean)));
+        el.selectedTeamLabel.textContent = teamNames.length ? `${teamNames.join(' / ')} 주문` : '여러 팀 메뉴를 한 번에 담을 수 있습니다.';
+        if (!items.length) {
+          el.cartList.innerHTML = '<li class="summary-row"><span>선택한 메뉴가 없습니다.</span><strong>0원</strong></li>';
+        } else {
+          el.cartList.innerHTML = items.map((item) => {
+            const menu = getMenu(item.menuId);
+            if (!menu) return '';
+            return `
+              <li class="summary-row">
+                <span>${escapeHtml(menu.name)} x ${item.quantity}</span>
+                <strong>${money(menu.price * item.quantity)}</strong>
+              </li>
+            `;
+          }).join('');
+        }
+        el.totalAmount.textContent = money(cartTotal());
+        el.submitOrder.disabled = !items.length;
+      }
+
+      function showMessage(message, type = 'warn') {
+        el.formMessage.textContent = message;
+        el.formMessage.className = `notice ${type}`;
+      }
+
+      function hideMessage() {
+        el.formMessage.className = 'notice is-hidden';
+        el.formMessage.textContent = '';
+      }
+
+      function saveOrder(order) {
+        state.order = order;
+      }
+
+      function rememberPickupOrder(order) {
+        if (!order || !order.orderId || !order.orderToken) return;
+        let orders = [];
+        try {
+          orders = JSON.parse(sessionStorage.getItem('missionBazaarPickupOrders') || '[]');
+          if (!Array.isArray(orders)) orders = [];
+        } catch (error) {
+          orders = [];
+        }
+
+        orders = orders.filter((item) => item.orderId !== order.orderId);
+        orders.unshift(order);
+        orders = orders.slice(0, 20);
+        sessionStorage.setItem('missionBazaarPickupOrder', JSON.stringify(order));
+        sessionStorage.setItem('missionBazaarPickupOrders', JSON.stringify(orders));
+      }
+
+      function customerKeyFromOrder(order) {
+        const name = String(order?.pickupName || '').trim().replace(/\s+/g, '').toLowerCase();
+        const phone = String(order?.phone || '').replace(/\D/g, '');
+        return name && phone ? `${name}:${phone}` : '';
+      }
+
+      function savePrefetchedPickupSnapshot(order, result) {
+        const customerKey = customerKeyFromOrder(order);
+        if (!customerKey || !result || !Array.isArray(result.orders)) return;
+        sessionStorage.setItem('missionBazaarPickupSnapshot', JSON.stringify({
+          customerKey,
+          result,
+          savedAt: new Date().toISOString()
+        }));
+      }
+
+      function prefetchPickupOrders(order) {
+        if (!order || !order.orderId || !order.orderToken) return;
+        callServer('refreshPickupOrder', {
+          orderId: order.orderId,
+          orderToken: order.orderToken
+        })
+          .then((result) => savePrefetchedPickupSnapshot(order, result))
+          .catch(() => {});
+      }
+
+      function loadSavedOrderRef() {
+        return null;
+      }
+
+      function renderOrder() {
+        if (!state.order) {
+          el.orderResult.classList.remove('is-visible');
+          el.orderForm.classList.remove('is-hidden');
+          return;
+        }
+
+        const order = state.order;
+        const payment = order.payment || state.settings || {};
+        el.orderForm.classList.add('is-hidden');
+        el.orderResult.classList.add('is-visible');
+        el.orderNumber.textContent = order.orderId;
+        el.paymentTotal.textContent = money(order.totalAmount);
+        el.paymentAccount.textContent = `${payment.bankName || ''} ${payment.accountNumber || ''} ${payment.accountHolder || ''}`.trim();
+        el.statusLabel.textContent = `${order.teamName || ''} ${order.statusLabel}`.trim();
+        el.payerExample.textContent = `${order.orderId} ${order.pickupName || '이름'}`;
+
+        if (payment.qrImageUrl) {
+          el.qrImage.src = payment.qrImageUrl;
+          el.qrImage.classList.remove('is-hidden');
+        } else {
+          el.qrImage.classList.add('is-hidden');
+        }
+
+        el.paidButton.disabled = order.status !== 'PAYMENT_PENDING';
+      }
+
+      async function loadBootstrap() {
+        hideMessage();
+        const bootstrap = !usedInitialBootstrap && INITIAL_BOOTSTRAP
+          ? INITIAL_BOOTSTRAP
+          : await callServer('getPublicBootstrap');
+        usedInitialBootstrap = true;
+        state.menus = bootstrap.menus || [];
+        state.teams = bootstrap.teams || [];
+        state.settings = bootstrap.settings || {};
+        localStorage.removeItem('missionBazaarLastOrder');
+        if (bootstrap.error) {
+          showMessage(bootstrap.error, 'danger');
+        }
+        renderMenus();
+        renderCart();
+
+        const saved = loadSavedOrderRef();
+        if (saved && saved.orderId && saved.orderToken) {
+          try {
+            const order = await callServer('getOrderPublic', saved);
+            saveOrder(order);
+            renderOrder();
+          } catch (error) {
+            localStorage.removeItem('missionBazaarLastOrder');
+          }
+        }
+      }
+
+      async function submitOrder(event) {
+        event.preventDefault();
+        const startedAt = perfNow();
+        hideMessage();
+        el.submitOrder.disabled = true;
+        el.submitOrder.textContent = '주문 생성 중';
+
+        try {
+          const payload = {
+            pickupName: el.pickupName.value,
+            phone: el.phone.value,
+            memo: el.memo.value,
+            items: getCartItems()
+          };
+          const order = await callServer('createOrder', payload);
+          saveOrder(order);
+          rememberPickupOrder(order);
+          renderOrder();
+          setTimeout(() => prefetchPickupOrders(order), 300);
+          perfLog('submitOrder.total', startedAt, { ok: true, orderId: order.orderId });
+        } catch (error) {
+          perfLog('submitOrder.total', startedAt, { ok: false, error: error.message || String(error) });
+          showMessage(error.message || String(error), 'danger');
+        } finally {
+          el.submitOrder.textContent = '주문 생성';
+          renderCart();
+        }
+      }
+
+      function markPaid() {
+        if (!state.order) return;
+        const startedAt = perfNow();
+        el.paidButton.disabled = true;
+        el.paidButton.textContent = '처리 중';
+
+        const order = {
+          ...state.order,
+          status: 'PAYMENT_CHECKING',
+          statusLabel: '입금 확인 중'
+        };
+        saveOrder(order);
+        rememberPickupOrder(order);
+        sendPaymentCheckingBeacon(order);
+        perfLog('markPaid.navigate', startedAt, { orderId: order.orderId });
+        navigateTop(pickupUrl(order));
+      }
+
+      async function refreshOrder() {
+        if (!state.order) return;
+        const order = await callServer('getOrderPublic', {
+          orderId: state.order.orderId,
+          orderToken: state.order.orderToken
+        });
+        saveOrder(order);
+        renderOrder();
+      }
+
+      function startNewOrder() {
+        localStorage.removeItem('missionBazaarLastOrder');
+        state.order = null;
+        state.cart = {};
+        el.orderForm.reset();
+        hideMessage();
+        renderMenus();
+        renderCart();
+        renderOrder();
+      }
+
+      el.menuList.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-menu-id]');
+        if (!button) return;
+        const menuId = button.dataset.menuId;
+        const delta = Number(button.dataset.delta || 0);
+        const menu = getMenu(menuId);
+        if (!menu) return;
+        state.cart[menuId] = Math.max(0, (state.cart[menuId] || 0) + delta);
+        renderMenus();
+        renderCart();
+      });
+
+      el.orderForm.addEventListener('submit', submitOrder);
+      el.paidButton.addEventListener('click', markPaid);
+      el.refreshOrderButton.addEventListener('click', refreshOrder);
+      el.newOrderButton.addEventListener('click', startNewOrder);
+      el.reloadButton.addEventListener('click', loadBootstrap);
+
+      loadBootstrap().catch((error) => {
+        el.menuList.innerHTML = `<div class="empty-state">${escapeHtml(error.message || error)}</div>`;
+      });
+    </script>
+  </body>
+</html>

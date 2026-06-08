@@ -1,0 +1,10 @@
+services:
+  web:
+    build:
+      context: ./web
+    ports:
+      - "3010:3010"
+    environment:
+      NEXT_PUBLIC_APP_URL: "http://localhost:3010"
+      COOKIE_SECRET: "local-docker-demo-cookie-secret-please-replace"
+      EVENT_CODE: "mission-bazaar-2026"
