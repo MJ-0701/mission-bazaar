@@ -181,6 +181,7 @@ export function AdminApp() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [cancelDraft, setCancelDraft] = useState<{ sectionId: string; reason: string } | null>(null);
+  const [payConfirm, setPayConfirm] = useState<{ sectionId: string } | null>(null);
   const [soundOn, setSoundOn] = useState(true);
 
   const soundOnRef = useRef(true);
@@ -365,6 +366,32 @@ export function AdminApp() {
   const activeOrderCount = (dashboard?.orders || []).filter((order) => order.status !== "CANCELED").length;
   const stockGroups = useMemo(() => groupMenusForStock(dashboard?.menus || []), [dashboard?.menus]);
 
+  // 동명이인 감지: 미확인(입금대기·확인중·문제) 주문 중 같은 입금자명이 몇 건인지(주문번호 기준 distinct).
+  const duplicateDepositors = useMemo(() => {
+    const orderNosByName = new Map<string, Set<string>>();
+    for (const section of dashboard?.orders || []) {
+      if (
+        section.status !== "PAYMENT_PENDING" &&
+        section.status !== "PAYMENT_CHECKING" &&
+        section.status !== "PAYMENT_ISSUE"
+      ) {
+        continue;
+      }
+      const name = section.depositorName.trim();
+      if (!name) {
+        continue;
+      }
+      const set = orderNosByName.get(name) || new Set<string>();
+      set.add(section.orderNo);
+      orderNosByName.set(name, set);
+    }
+    const counts = new Map<string, number>();
+    for (const [name, set] of orderNosByName) {
+      counts.set(name, set.size);
+    }
+    return counts;
+  }, [dashboard?.orders]);
+
   async function confirmCancel(section: OrderSection) {
     const reason = cancelDraft?.sectionId === section.id ? cancelDraft.reason.trim() : "";
     if (reason.length < 2) {
@@ -530,10 +557,14 @@ export function AdminApp() {
                 visibleOrderGroups.map((order) => {
                   const status = primaryStatus(order.sections);
                   const needsConfirm = awaitingDeposit(order.sections);
+                  const dupNameCount = duplicateDepositors.get(order.depositorName.trim()) || 0;
                   const itemGroups = groupOrderItemsByCategory(order.items);
                   const itemQuantity = order.items.reduce((sum, line) => sum + line.item.quantity, 0);
                   const cancelSection = cancelDraft
                     ? order.sections.find((section) => section.id === cancelDraft.sectionId)
+                    : null;
+                  const paySection = payConfirm
+                    ? order.sections.find((section) => section.id === payConfirm.sectionId)
                     : null;
                   return (
                     <article
@@ -569,6 +600,9 @@ export function AdminApp() {
                                 <strong>{formatWon(order.subtotalAmount)}</strong>
                               </div>
                             </div>
+                            {dupNameCount > 1 ? (
+                              <p className="dup-warning">⚠️ 같은 입금자명 {dupNameCount}건 — 금액으로 구분하세요</p>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="receipt-info-grid">
@@ -626,7 +660,11 @@ export function AdminApp() {
                               type="button"
                               disabled={busy === section.id}
                               key={`${section.id}-${action.status}`}
-                              onClick={() => changeStatus(section, action.status)}
+                              onClick={() =>
+                                action.label === "입금확인"
+                                  ? setPayConfirm({ sectionId: section.id })
+                                  : changeStatus(section, action.status)
+                              }
                             >
                               {order.sections.length > 1 ? `${section.teamName} ${action.label}` : action.label}
                             </button>
@@ -721,6 +759,48 @@ export function AdminApp() {
                               onClick={() => confirmCancel(cancelSection)}
                             >
                               취소 확정
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      {payConfirm && paySection ? (
+                        <div className="cancel-confirm pay-confirm">
+                          <div>
+                            <strong>입금 확인</strong>
+                            <p>통장에서 실제 입금을 확인한 뒤 확정하세요.</p>
+                          </div>
+                          <div className="pay-confirm-facts">
+                            <div>
+                              <span>입금자명</span>
+                              <strong>{order.depositorName || "-"}</strong>
+                            </div>
+                            <div>
+                              <span>입금액</span>
+                              <strong>{formatWon(order.subtotalAmount)}</strong>
+                            </div>
+                          </div>
+                          {dupNameCount > 1 ? (
+                            <p className="dup-warning">⚠️ 같은 입금자명 {dupNameCount}건 — 금액 일치 꼭 확인</p>
+                          ) : null}
+                          <div className="button-row">
+                            <button
+                              className="btn full"
+                              type="button"
+                              disabled={busy === paySection.id}
+                              onClick={() => setPayConfirm(null)}
+                            >
+                              돌아가기
+                            </button>
+                            <button
+                              className="btn status-button status-paid full"
+                              type="button"
+                              disabled={busy === paySection.id}
+                              onClick={async () => {
+                                await changeStatus(paySection, "PAID");
+                                setPayConfirm(null);
+                              }}
+                            >
+                              통장 확인함 · 입금확정
                             </button>
                           </div>
                         </div>
