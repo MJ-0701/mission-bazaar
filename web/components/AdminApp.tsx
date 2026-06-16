@@ -82,17 +82,6 @@ function awaitingDeposit(sections: OrderSection[]) {
   return sections.some((section) => section.status === "PAYMENT_CHECKING");
 }
 
-function groupAttentionRank(sections: OrderSection[]) {
-  const status = primaryStatus(sections);
-  if (status === "PAYMENT_CHECKING") {
-    return 0;
-  }
-  if (status === "PAYMENT_PENDING" || status === "PAYMENT_ISSUE") {
-    return 1;
-  }
-  return 2;
-}
-
 function groupStatusText(sections: OrderSection[]) {
   if (sections.length === 1) {
     return sections[0].statusLabel;
@@ -382,13 +371,8 @@ export function AdminApp() {
       })
       .sort(orderCreatedAsc);
   }, [dashboard, filter, query, teamFilter]);
-  const visibleOrderGroups = useMemo(
-    () =>
-      groupOrderSections(visibleOrders).sort(
-        (a, b) => groupAttentionRank(a.sections) - groupAttentionRank(b.sections)
-      ),
-    [visibleOrders]
-  );
+  // 노출 순서는 무조건 시간 ASC 선입선출(FIFO). 미확인 강조는 색/대조블록으로만, 순서는 안 바꿈.
+  const visibleOrderGroups = useMemo(() => groupOrderSections(visibleOrders), [visibleOrders]);
   const activeOrderCount = (dashboard?.orders || []).filter((order) => order.status !== "CANCELED").length;
   const stockGroups = useMemo(() => groupMenusForStock(dashboard?.menus || []), [dashboard?.menus]);
 
