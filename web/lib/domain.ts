@@ -2,6 +2,7 @@ import type { Menu, OrderItemInput, OrderStatus, Team } from "./types";
 
 export const APP_TITLE = "선교 바자회 주문";
 export const EVENT_CODE = process.env.EVENT_CODE || "mission-bazaar-2026";
+export const MENU_CATEGORY_ORDER = ["디쉬", "음료", "기타"];
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   PAYMENT_PENDING: "입금 대기",
@@ -17,7 +18,7 @@ export const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PAYMENT_PENDING: ["PAID", "CANCELED"],
   PAYMENT_CHECKING: ["PAID", "PAYMENT_ISSUE", "CANCELED"],
   PAYMENT_ISSUE: ["PAID", "CANCELED"],
-  PAID: ["READY", "CANCELED"],
+  PAID: ["READY", "CANCELED", "PAYMENT_CHECKING"],
   READY: ["COMPLETE"],
   COMPLETE: [],
   CANCELED: ["PAYMENT_CHECKING"]
@@ -35,6 +36,38 @@ export const STATUS_PRIORITY: Record<OrderStatus, number> = {
 
 export function formatWon(amount: number) {
   return `${new Intl.NumberFormat("ko-KR").format(amount)}원`;
+}
+
+export function menuCategoryLabel(category: string) {
+  const label = String(category || "").trim();
+  if (!label) {
+    return "기타";
+  }
+  if (label === "음식" || label.toLowerCase() === "dish") {
+    return "디쉬";
+  }
+  if (label.toLowerCase() === "drink" || label.toLowerCase() === "beverage") {
+    return "음료";
+  }
+  return label;
+}
+
+function menuCategoryRank(category: string) {
+  const index = MENU_CATEGORY_ORDER.indexOf(menuCategoryLabel(category));
+  return index === -1 ? MENU_CATEGORY_ORDER.length : index;
+}
+
+export function compareMenuCategories(a: string, b: string) {
+  return menuCategoryRank(a) - menuCategoryRank(b) || menuCategoryLabel(a).localeCompare(menuCategoryLabel(b), "ko");
+}
+
+export function compareMenus(a: Menu, b: Menu) {
+  return (
+    compareMenuCategories(a.category, b.category) ||
+    a.sortOrder - b.sortOrder ||
+    a.teamName.localeCompare(b.teamName, "ko") ||
+    a.name.localeCompare(b.name, "ko")
+  );
 }
 
 export function sanitizeText(value: unknown, maxLength: number) {
@@ -79,17 +112,37 @@ export function groupMenusByTeam(menus: Menu[], teams: Team[]) {
         menus
           .filter((menu) => menu.teamId === team.id)
           .reduce((map, menu) => {
-            const existing = map.get(menu.category) || [];
+            const category = menuCategoryLabel(menu.category);
+            const existing = map.get(category) || [];
             existing.push(menu);
-            map.set(menu.category, existing);
+            map.set(category, existing);
             return map;
           }, new Map<string, Menu[]>())
-      ).map(([category, items]) => ({
-        category,
-        items: items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ko"))
-      }))
+      )
+        .sort(([a], [b]) => compareMenuCategories(a, b))
+        .map(([category, items]) => ({
+          category,
+          items: items.sort(compareMenus)
+        }))
     }))
     .filter((group) => group.categories.length > 0);
+}
+
+export function groupMenusByCategory(menus: Menu[]) {
+  return Array.from(
+    menus.reduce((map, menu) => {
+      const category = menuCategoryLabel(menu.category);
+      const existing = map.get(category) || [];
+      existing.push(menu);
+      map.set(category, existing);
+      return map;
+    }, new Map<string, Menu[]>())
+  )
+    .sort(([a], [b]) => compareMenuCategories(a, b))
+    .map(([category, items]) => ({
+      category,
+      items: items.sort(compareMenus)
+    }));
 }
 
 export function buildOrderLines(items: OrderItemInput[], menus: Menu[]) {

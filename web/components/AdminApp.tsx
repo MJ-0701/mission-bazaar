@@ -182,7 +182,10 @@ export function AdminApp() {
   const [error, setError] = useState("");
   const [cancelDraft, setCancelDraft] = useState<{ sectionId: string; reason: string } | null>(null);
   const [payConfirm, setPayConfirm] = useState<{ sectionId: string } | null>(null);
+  const [undoToast, setUndoToast] = useState<{ section: OrderSection; orderNo: string } | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+
+  const undoTimerRef = useRef<number | null>(null);
 
   const soundOnRef = useRef(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -316,6 +319,29 @@ export function AdminApp() {
     } finally {
       setBusy("");
     }
+  }
+
+  // 입금확인 = 원탭 즉시 확정 후 5초간 실행취소 토스트 노출(모달 피로 제거).
+  async function confirmPaid(section: OrderSection, orderNo: string) {
+    setPayConfirm(null);
+    await changeStatus(section, "PAID");
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    setUndoToast({ section, orderNo });
+    undoTimerRef.current = window.setTimeout(() => setUndoToast(null), 5000);
+  }
+
+  async function undoPaid() {
+    if (!undoToast) {
+      return;
+    }
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    const section = undoToast.section;
+    setUndoToast(null);
+    await changeStatus(section, "PAYMENT_CHECKING");
   }
 
   async function updateAvailability(menuId: string, isAvailable: boolean) {
@@ -662,7 +688,9 @@ export function AdminApp() {
                               key={`${section.id}-${action.status}`}
                               onClick={() =>
                                 action.label === "입금확인"
-                                  ? setPayConfirm({ sectionId: section.id })
+                                  ? dupNameCount > 1
+                                    ? setPayConfirm({ sectionId: section.id })
+                                    : confirmPaid(section, order.orderNo)
                                   : changeStatus(section, action.status)
                               }
                             >
@@ -795,10 +823,7 @@ export function AdminApp() {
                               className="btn status-button status-paid full"
                               type="button"
                               disabled={busy === paySection.id}
-                              onClick={async () => {
-                                await changeStatus(paySection, "PAID");
-                                setPayConfirm(null);
-                              }}
+                              onClick={() => confirmPaid(paySection, order.orderNo)}
                             >
                               통장 확인함 · 입금확정
                             </button>
@@ -857,6 +882,15 @@ export function AdminApp() {
           </section>
         </div>
       </main>
+
+      {undoToast ? (
+        <div className="undo-toast" role="status">
+          <span>{undoToast.orderNo} 입금확인 완료</span>
+          <button type="button" onClick={undoPaid}>
+            실행취소
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }
