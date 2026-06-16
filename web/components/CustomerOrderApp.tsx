@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { compareMenus, formatWon, groupMenusByCategory, menuCategoryLabel } from "@/lib/domain";
 import type { Menu, OrderGroup, PublicBootstrap } from "@/lib/types";
 
@@ -33,25 +33,6 @@ export function CustomerOrderApp() {
   const [error, setError] = useState("");
   const [accountCopyState, setAccountCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [amountCopyState, setAmountCopyState] = useState<"idle" | "copied" | "failed">("idle");
-
-  // 운영자 전용 숨은 진입: 손님 화면엔 노출하지 않고 타이틀 5회 연속 탭 시 /admin 이동.
-  const adminTapRef = useRef(0);
-  const adminTapTimerRef = useRef<number | null>(null);
-
-  function handleHiddenAdminTap() {
-    adminTapRef.current += 1;
-    if (adminTapTimerRef.current) {
-      window.clearTimeout(adminTapTimerRef.current);
-    }
-    if (adminTapRef.current >= 5) {
-      adminTapRef.current = 0;
-      window.location.href = "/admin";
-      return;
-    }
-    adminTapTimerRef.current = window.setTimeout(() => {
-      adminTapRef.current = 0;
-    }, 1500);
-  }
 
   useEffect(() => {
     api<PublicBootstrap>("/api/public/bootstrap")
@@ -219,10 +200,9 @@ export function CustomerOrderApp() {
       <header className="topbar customer-topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <h1 onClick={handleHiddenAdminTap} style={{ cursor: "default" }}>
-              {bootstrap.appTitle}
-            </h1>
+            <h1>{bootstrap.appTitle}</h1>
             <p>메뉴 선택 후 송금하면 운영팀이 입금을 확인합니다.</p>
+            <a className="operator-login-link" href="/admin">운영팀 로그인 →</a>
           </div>
           <div className="customer-top-summary">
             <span>{totalQuantity ? `${totalQuantity}개 선택` : "주문 대기"}</span>
