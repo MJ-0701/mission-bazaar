@@ -1754,6 +1754,35 @@ a {
     gap: 8px;
   }
 
+  /* 모바일 카드 압축: 정보+버튼 한 화면 */
+  .deposit-match {
+    padding: 8px 10px;
+  }
+  .deposit-match-tag {
+    margin-bottom: 4px;
+  }
+  .deposit-match-body strong {
+    font-size: 1rem;
+  }
+  /* 입금대조에 입금자 이미 있으면 info-grid 중복 입금자 숨김 */
+  .order-card.needs-confirm .receipt-info-grid p:first-child {
+    display: none;
+  }
+  .receipt-info-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .receipt-info-grid p {
+    padding: 6px 8px;
+  }
+  .receipt-info-grid strong {
+    font-size: 0.85rem;
+  }
+  /* 합계는 요약/입금대조에 이미 금액 표시 → 모바일선 숨김 */
+  .receipt-total-line {
+    display: none;
+  }
+
   .order-card .order-number {
     min-height: 48px;
     font-size: 1.36rem;
