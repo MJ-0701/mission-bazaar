@@ -313,8 +313,10 @@ export async function completePickup(orderNoValue: string, token: string, sectio
   const order = findOrder(orderNoValue);
   assertToken(order, token);
   const updatedAt = nowIso();
-  const section = order.sections.find((item) => item.id === sectionId);
-  if (!section) {
+  // 같은 손님(customerKey)의 다른 주문 섹션도 수령완료 가능.
+  const owner = state.orders.find((o) => o.sections.some((s) => s.id === sectionId));
+  const section = owner?.sections.find((s) => s.id === sectionId);
+  if (!section || !owner || owner.customerKey !== order.customerKey) {
     throw new Error("주문 섹션을 찾을 수 없습니다.");
   }
   if (section.status !== "READY" && section.status !== "COMPLETE") {
@@ -324,7 +326,7 @@ export async function completePickup(orderNoValue: string, token: string, sectio
   section.statusLabel = STATUS_LABELS.COMPLETE;
   section.updatedAt = updatedAt;
   section.statusUpdatedAt = updatedAt;
-  order.updatedAt = updatedAt;
+  owner.updatedAt = updatedAt;
   return getPickupSnapshot(orderNoValue, token);
 }
 
