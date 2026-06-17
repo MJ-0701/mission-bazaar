@@ -294,8 +294,8 @@ export function CustomerOrderApp() {
             {createdOrder ? (
               <div className="receipt-flow">
                 <div className="info-box">
-                  <strong>입금은 '{createdOrder.depositorName}' 이름으로 해주세요.</strong>
-                  운영팀이 예금주명과 금액으로 확인합니다. 가능하면 입금 메모에 주문번호 {createdOrder.orderNo}도 남겨주세요.
+                  <strong>입금 메모에 주문번호 {createdOrder.orderNo} 를 꼭 남겨주세요.</strong>
+                  운영팀이 주문번호로 입금을 확인합니다. (같은 이름·금액 주문이 있을 수 있어 주문번호가 가장 정확해요)
                 </div>
                 <div className="receipt-card">
                   <span>주문번호</span>

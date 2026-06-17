@@ -199,8 +199,9 @@ export function PickupBoard({ orderNo, token }: { orderNo: string; token: string
               <div className="pickup-grid">
                 {snapshot.orders.map((section) => {
                   const ready = section.status === "READY";
+                  const canceled = section.status === "CANCELED";
                   return (
-                    <article className={`pickup-card ${ready ? "ready" : ""}`} key={section.id}>
+                    <article className={`pickup-card ${ready ? "ready" : ""} ${canceled ? "canceled" : ""}`} key={section.id}>
                       <div className="pickup-number">{section.orderNo}</div>
                       <div className="pickup-meta">
                         {section.teamName} · {section.statusLabel}
@@ -212,6 +213,12 @@ export function PickupBoard({ orderNo, token }: { orderNo: string; token: string
                           </div>
                         ))}
                       </div>
+                      {canceled ? (
+                        <div className="pickup-cancel-note">
+                          이 주문은 취소되었습니다.
+                          {section.adminNote ? ` (사유: ${section.adminNote})` : ""}
+                        </div>
+                      ) : null}
                       {ready ? (
                         <button
                           className="btn primary full"
