@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { compareMenuCategories, formatWon, menuCategoryLabel, normalizeAdminPin } from "@/lib/domain";
+import { subscribeOrders, type RealtimeHandle } from "@/lib/realtime-client";
 import type { AdminDashboard, Menu, OrderItem, OrderSection, OrderStatus } from "@/lib/types";
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -252,8 +253,42 @@ export function AdminApp() {
 
   useEffect(() => {
     loadDashboard(true);
-    const timer = window.setInterval(() => loadDashboard(true), 1000);
-    return () => window.clearInterval(timer);
+    // 실시간(broadcast) + 폴링 백업. 실시간 연결 시 폴링을 느슨하게(6s), 실패 시 1s.
+    let active = true;
+    let pollMs = 1000;
+    let timer = window.setInterval(() => loadDashboard(true), pollMs);
+    let handle: RealtimeHandle | null = null;
+    const setPoll = (ms: number) => {
+      if (ms === pollMs) {
+        return;
+      }
+      pollMs = ms;
+      window.clearInterval(timer);
+      timer = window.setInterval(() => loadDashboard(true), pollMs);
+    };
+    subscribeOrders(
+      () => {
+        if (active) {
+          loadDashboard(true);
+        }
+      },
+      (connected) => {
+        if (active) {
+          setPoll(connected ? 6000 : 1000);
+        }
+      }
+    ).then((h) => {
+      if (!active) {
+        h?.close();
+        return;
+      }
+      handle = h;
+    });
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      handle?.close();
+    };
   }, []);
 
   function toggleSound() {
