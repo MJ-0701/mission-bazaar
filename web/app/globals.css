@@ -1720,6 +1720,11 @@ a {
   .sidebar {
     position: static;
   }
+
+  /* 모바일: 주문 목록을 맨 위로 (상태/필터 패널은 아래로) */
+  .admin-main {
+    order: -1;
+  }
 }
 
 @media (min-width: 700px) and (max-width: 1180px) {
