@@ -385,9 +385,9 @@ export async function updateOrderStatus(
   if (!order || !section) {
     throw new Error("주문을 찾을 수 없습니다.");
   }
-  // 입금확인(→PAID)은 master 전용.
-  if (nextStatus === "PAID" && session.role !== "master") {
-    throw new Error("입금확인은 master 권한만 가능합니다.");
+  // 입금 관련 처리(입금확인/입금문제/복구)는 master 전용.
+  if (["PAID", "PAYMENT_ISSUE", "PAYMENT_CHECKING"].includes(nextStatus) && session.role !== "master") {
+    throw new Error("입금 관련 처리는 master 권한만 가능합니다.");
   }
   if (!canTransition(section.status, nextStatus)) {
     throw new Error(`${section.statusLabel}에서 ${statusLabel(nextStatus)}로 변경할 수 없습니다.`);

@@ -561,9 +561,9 @@ export async function updateOrderStatus(
   if ((section.orders as OrderRow | undefined)?.event_id !== event.id) {
     throw new Error("해당 주문에 접근할 수 없습니다.");
   }
-  // 입금확인(→PAID)은 master 전용. admin은 준비완료 이후 단계만 처리.
-  if (nextStatus === "PAID" && session.role !== "master") {
-    throw new Error("입금확인은 master 권한만 가능합니다.");
+  // 입금 관련 처리(입금확인 PAID / 입금문제 / 복구 →확인중)는 master 전용. admin은 준비완료 이후만.
+  if (["PAID", "PAYMENT_ISSUE", "PAYMENT_CHECKING"].includes(nextStatus) && session.role !== "master") {
+    throw new Error("입금 관련 처리는 master 권한만 가능합니다.");
   }
   if (!canTransition(section.status, nextStatus)) {
     throw new Error(`${statusLabel(section.status)}에서 ${statusLabel(nextStatus)}로 변경할 수 없습니다.`);
