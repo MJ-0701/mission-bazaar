@@ -267,8 +267,16 @@ export function AdminApp() {
       timer = window.setInterval(() => loadDashboard(true), pollMs);
     };
     subscribeOrders(
-      () => loadDashboard(true),
-      (connected) => setPoll(connected ? 6000 : 1000)
+      () => {
+        if (active) {
+          loadDashboard(true);
+        }
+      },
+      (connected) => {
+        if (active) {
+          setPoll(connected ? 6000 : 1000);
+        }
+      }
     ).then((h) => {
       if (!active) {
         h?.close();

@@ -115,8 +115,16 @@ export function PickupBoard({ orderNo, token }: { orderNo: string; token: string
       timer = window.setInterval(() => refresh(true, nextAccess), pollMs);
     };
     subscribeOrders(
-      () => refresh(true, nextAccess),
-      (connected) => setPoll(connected ? 6000 : 1000)
+      () => {
+        if (active) {
+          refresh(true, nextAccess);
+        }
+      },
+      (connected) => {
+        if (active) {
+          setPoll(connected ? 6000 : 1000);
+        }
+      }
     ).then((h) => {
       if (!active) {
         h?.close();
