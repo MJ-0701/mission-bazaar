@@ -100,7 +100,7 @@ export function PickupBoard({ orderNo, token }: { orderNo: string; token: string
     }
 
     refresh(false, nextAccess);
-    const timer = window.setInterval(() => refresh(true, nextAccess), 2500);
+    const timer = window.setInterval(() => refresh(true, nextAccess), 1000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderNo, token]);

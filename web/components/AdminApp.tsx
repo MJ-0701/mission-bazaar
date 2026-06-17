@@ -252,7 +252,7 @@ export function AdminApp() {
 
   useEffect(() => {
     loadDashboard(true);
-    const timer = window.setInterval(() => loadDashboard(true), 2500);
+    const timer = window.setInterval(() => loadDashboard(true), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
