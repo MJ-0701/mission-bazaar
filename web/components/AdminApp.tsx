@@ -771,7 +771,8 @@ export function AdminApp() {
                             <button
                               className="btn status-button status-canceled full"
                               type="button"
-                              disabled={busy === section.id}
+                              // 손님 '입금했어요' 전(PENDING)엔 취소도 액션 불가 — 입금 확인 중부터 가능.
+                              disabled={busy === section.id || section.status === "PAYMENT_PENDING"}
                               key={`${section.id}-cancel`}
                               onClick={() =>
                                 setCancelDraft({
