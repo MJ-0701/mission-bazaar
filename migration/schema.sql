@@ -14,7 +14,6 @@ create type order_status as enum (
 );
 
 create type admin_role as enum (
-  'master',
   'team'
 );
 
@@ -56,8 +55,7 @@ create table admin_pins (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (
-    (role = 'master' and team_id is null)
-    or (role = 'team' and team_id is not null)
+    role = 'team' and team_id is not null
   )
 );
 
@@ -83,6 +81,7 @@ create table orders (
   order_token_hash text not null,
   pickup_name text not null,
   phone text not null,
+  depositor_name text not null default '',
   customer_key text not null,
   memo text not null default '',
   total_amount integer not null check (total_amount >= 0),

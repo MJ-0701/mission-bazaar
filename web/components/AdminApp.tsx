@@ -288,7 +288,7 @@ export function AdminApp() {
     setPin("");
   }
 
-  async function changeStatus(section: OrderSection, status: OrderStatus, adminNote = "") {
+  async function changeStatus(section: OrderSection, status: OrderStatus, adminNote = ""): Promise<boolean> {
     setBusy(section.id);
     setError("");
     try {
@@ -303,8 +303,10 @@ export function AdminApp() {
         })
       );
       setCancelDraft(null);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "상태 변경에 실패했습니다.");
+      return false;
     } finally {
       setBusy("");
     }
@@ -313,7 +315,10 @@ export function AdminApp() {
   // 입금확인 = 원탭 즉시 확정 후 5초간 실행취소 토스트 노출(모달 피로 제거).
   async function confirmPaid(section: OrderSection, orderNo: string) {
     setPayConfirm(null);
-    await changeStatus(section, "PAID");
+    const ok = await changeStatus(section, "PAID");
+    if (!ok) {
+      return; // 입금확정 실패 시 토스트/실행취소 노출 안 함
+    }
     if (undoTimerRef.current) {
       window.clearTimeout(undoTimerRef.current);
     }
