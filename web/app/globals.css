@@ -1177,6 +1177,11 @@ a {
   animation: undo-rise 0.18s ease-out;
 }
 
+/* 동명이인 인지용 강조(절차는 막지 않음) */
+.undo-toast-warn {
+  background: #9a3412;
+}
+
 .undo-toast span {
   font-size: 0.92rem;
   font-weight: 700;
