@@ -2270,3 +2270,69 @@ a {
     text-align: left;
   }
 }
+
+/* 모바일 운영 카드 컴팩트 (높이 축소) — 마지막 정의라 우선 적용 */
+@media (max-width: 699px) {
+  .admin-order-list .order-card {
+    padding: 10px;
+    gap: 8px 12px;
+  }
+  .order-card .order-number {
+    min-height: 38px;
+    font-size: 1.12rem;
+  }
+  .order-summary {
+    gap: 5px;
+  }
+  .order-amount {
+    font-size: 1.05rem;
+  }
+  .status-text {
+    font-size: 0.9rem;
+  }
+  .receipt-details {
+    gap: 6px;
+  }
+  .deposit-match {
+    padding: 7px 9px;
+  }
+  .deposit-match-tag {
+    margin-bottom: 3px;
+    font-size: 0.66rem;
+  }
+  .deposit-match-body strong {
+    font-size: 0.95rem;
+  }
+  .menu-chips {
+    gap: 5px;
+  }
+  .menu-chip {
+    padding: 4px 9px;
+    font-size: 0.84rem;
+    gap: 5px;
+  }
+  .contact-line {
+    font-size: 0.78rem;
+  }
+  .receipt-toggle > summary {
+    font-size: 0.76rem;
+  }
+  /* 액션 버튼: full 무력화 + 한 줄 흐름으로 높이 절약 */
+  .order-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 6px;
+  }
+  .order-actions .btn.full {
+    width: auto;
+  }
+  .order-actions .btn {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 0.9rem;
+  }
+  .admin-main .panel-head {
+    min-height: 0;
+    padding: 12px 14px;
+  }
+}
