@@ -2317,18 +2317,19 @@ a {
   .receipt-toggle > summary {
     font-size: 0.76rem;
   }
-  /* 액션 버튼: full 무력화 + 한 줄 흐름으로 높이 절약 */
+  /* 액션 버튼: 한 줄 흐름(flex)으로 높이 절약 */
   .order-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 6px;
   }
+  .order-actions .btn,
   .order-actions .btn.full {
+    flex: 1 1 90px;
     width: auto;
-  }
-  .order-actions .btn {
+    min-width: 0;
     min-height: 38px;
-    padding: 0 10px;
+    padding: 0 8px;
     font-size: 0.9rem;
   }
   .admin-main .panel-head {
