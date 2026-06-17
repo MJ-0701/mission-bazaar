@@ -299,7 +299,6 @@ export async function getPickupSnapshot(orderNoValue: string, token: string): Pr
   const orders = state.orders
     .filter((item) => item.customerKey === order.customerKey)
     .flatMap((item) => item.sections)
-    .filter((section) => section.status !== "CANCELED")
     .map(withLabels);
   return {
     order: publicOrder(order),
