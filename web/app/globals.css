@@ -1303,7 +1303,40 @@ a {
 
 .receipt-details {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.receipt-items-compact {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fg-soft);
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.receipt-toggle > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.receipt-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+
+.receipt-toggle > summary::after {
+  content: " ▾";
+}
+
+.receipt-toggle[open] > summary::after {
+  content: " ▴";
+}
+
+.receipt-toggle[open] .receipt-item-groups {
+  margin-top: 8px;
 }
 
 .receipt-info-grid {
@@ -1712,9 +1745,13 @@ a {
   }
 
   .order-card {
-    grid-template-columns: 104px minmax(0, 1fr);
-    gap: 14px 16px;
-    padding: 14px;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 10px 14px;
+    padding: 12px;
+  }
+
+  .receipt-details {
+    gap: 8px;
   }
 
   .order-card .order-number {
