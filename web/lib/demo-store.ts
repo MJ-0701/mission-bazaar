@@ -7,6 +7,7 @@ import {
   canTransition,
   normalizeAdminPin,
   normalizeCustomerKey,
+  normalizePhone,
   sanitizeText,
   statusLabel
 } from "./domain";
@@ -39,7 +40,7 @@ type DemoState = {
   orders: DemoOrder[];
   settings: Settings;
   pinHashes: Array<{
-    role: "master" | "team";
+    role: "master" | "admin";
     teamId: string | null;
     label: string;
     hash: string;
@@ -52,17 +53,10 @@ const state: DemoState = globalThis.__missionBazaarDemoState || {
   counter: 0,
   teams: [
     {
-      id: "team-yeongju",
-      code: "yeongju",
-      name: "영주팀",
+      id: "team-food",
+      code: "food",
+      name: "먹거리팀",
       sortOrder: 10,
-      isActive: true
-    },
-    {
-      id: "team-jeju",
-      code: "jeju",
-      name: "제주팀",
-      sortOrder: 20,
       isActive: true
     }
   ],
@@ -80,20 +74,18 @@ const state: DemoState = globalThis.__missionBazaarDemoState || {
 state.menus = state.menus.length
   ? state.menus
   : [
-      menu("team-yeongju", "yeongju", "영주팀", "yeongju-morning-sand", "모닝샌드", 8000, "음식", 10),
-      menu("team-yeongju", "yeongju", "영주팀", "yeongju-blueberry-ade", "블루베리 에이드", 4500, "음료", 20),
-      menu("team-yeongju", "yeongju", "영주팀", "yeongju-americano", "아메리카노", 3000, "음료", 30),
-      menu("team-yeongju", "yeongju", "영주팀", "yeongju-honey-black-tea", "자몽허니 블랙티", 4500, "음료", 40),
-      menu("team-jeju", "jeju", "제주팀", "jeju-main-dish", "Main-Dish", 7000, "음식", 10),
-      menu("team-jeju", "jeju", "제주팀", "jeju-drink", "Drink", 4500, "음료", 20)
+      menu("team-food", "food", "먹거리팀", "food-canape-4", "카나페 4개", 3000, "디쉬", 10),
+      menu("team-food", "food", "먹거리팀", "food-morning-sandwich-set", "모닝샌드위치 세트 (대파크림치즈, 에그샐러드)", 6000, "디쉬", 20),
+      menu("team-food", "food", "먹거리팀", "food-watermelon-punch", "수박화채", 5000, "음료", 30),
+      menu("team-food", "food", "먹거리팀", "food-hallabong-ade", "한라봉에이드", 4000, "음료", 40),
+      menu("team-food", "food", "먹거리팀", "food-coffee", "커피", 3000, "음료", 50)
     ];
 
 state.pinHashes = state.pinHashes.length
   ? state.pinHashes
   : [
-      { role: "master", teamId: null, label: "master demo", hash: hashAdminPin("0000", EVENT_CODE) },
-      { role: "team", teamId: "team-yeongju", label: "영주팀 demo", hash: hashAdminPin("1111", EVENT_CODE) },
-      { role: "team", teamId: "team-jeju", label: "제주팀 demo", hash: hashAdminPin("2222", EVENT_CODE) }
+      { role: "master", teamId: null, label: "master demo", hash: hashAdminPin("1111", EVENT_CODE) },
+      { role: "admin", teamId: null, label: "admin demo", hash: hashAdminPin("2222", EVENT_CODE) }
     ];
 
 globalThis.__missionBazaarDemoState = state;
@@ -138,6 +130,7 @@ function publicOrder(order: DemoOrder): OrderGroup {
     orderToken: order.orderToken,
     pickupName: order.pickupName,
     phone: order.phone,
+    depositorName: order.depositorName,
     memo: order.memo,
     totalAmount: order.totalAmount,
     paymentMethod: order.paymentMethod,
@@ -193,13 +186,17 @@ export async function getPublicBootstrap(): Promise<PublicBootstrap> {
 
 export async function createOrder(payload: CreateOrderPayload): Promise<OrderGroup> {
   const pickupName = sanitizeText(payload.pickupName, 40);
-  const phone = sanitizeText(payload.phone, 30);
+  const phone = normalizePhone(String(payload.phone ?? "")).slice(0, 20);
+  const depositorName = sanitizeText(payload.depositorName, 40);
   const memo = sanitizeText(payload.memo, 300);
   if (!pickupName) {
     throw new Error("픽업자명을 입력해주세요.");
   }
   if (!phone) {
     throw new Error("연락처를 입력해주세요.");
+  }
+  if (!depositorName) {
+    throw new Error("입금하실 분(예금주) 성함을 입력해주세요.");
   }
 
   const lines = buildOrderLines(payload.items, state.menus);
@@ -228,6 +225,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<OrderGro
         subtotalAmount: 0,
         pickupName,
         phone,
+        depositorName,
         memo,
         adminNote: "",
         createdAt,
@@ -263,6 +261,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<OrderGro
     tokenHash: hashOrderToken(token),
     pickupName,
     phone,
+    depositorName,
     customerKey: normalizeCustomerKey(pickupName, phone),
     memo,
     totalAmount,
@@ -340,20 +339,20 @@ export async function loginAdmin(pin: string): Promise<AdminSession> {
   return {
     role: record.role,
     teamId: record.teamId,
-    teamCode: team?.code || null,
-    teamName: team?.name || null,
+    teamCode: team?.code ?? null,
+    teamName: team?.name ?? null,
     label: record.label,
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12
   };
 }
 
 export async function getAdminDashboard(session: AdminSession): Promise<AdminDashboard> {
-  const visibleMenus = state.menus.filter((menuItem) => session.role === "master" || menuItem.teamId === session.teamId);
-  const visibleTeams = state.teams.filter((team) => session.role === "master" || team.id === session.teamId);
+  // master/admin 모두 행사 전체를 본다(단일 행사 콘솔).
+  const visibleMenus = state.menus;
+  const visibleTeams = state.teams;
   const orders = sortSections(
     state.orders
       .flatMap((order) => order.sections)
-      .filter((section) => session.role === "master" || section.teamId === session.teamId)
       .filter((section) => section.status !== "COMPLETE")
       .map(withLabels)
   );
@@ -386,8 +385,9 @@ export async function updateOrderStatus(
   if (!order || !section) {
     throw new Error("주문을 찾을 수 없습니다.");
   }
-  if (session.role !== "master" && section.teamId !== session.teamId) {
-    throw new Error("해당 팀 주문에 접근할 수 없습니다.");
+  // 입금확인(→PAID)은 master 전용.
+  if (nextStatus === "PAID" && session.role !== "master") {
+    throw new Error("입금확인은 master 권한만 가능합니다.");
   }
   if (!canTransition(section.status, nextStatus)) {
     throw new Error(`${section.statusLabel}에서 ${statusLabel(nextStatus)}로 변경할 수 없습니다.`);
@@ -410,9 +410,6 @@ export async function updateMenuAvailability(session: AdminSession, menuId: stri
   const menuItem = state.menus.find((item) => item.id === menuId);
   if (!menuItem) {
     throw new Error("메뉴를 찾을 수 없습니다.");
-  }
-  if (session.role !== "master" && menuItem.teamId !== session.teamId) {
-    throw new Error("해당 팀 메뉴에 접근할 수 없습니다.");
   }
   menuItem.isAvailable = isAvailable;
   return getAdminDashboard(session);

@@ -7,7 +7,7 @@ export type OrderStatus =
   | "PAYMENT_ISSUE"
   | "CANCELED";
 
-export type AdminRole = "master" | "team";
+export type AdminRole = "master" | "admin";
 
 export type Team = {
   id: string;
@@ -60,6 +60,7 @@ export type OrderSection = {
   subtotalAmount: number;
   pickupName: string;
   phone: string;
+  depositorName: string;
   memo: string;
   adminNote: string;
   createdAt: string;
@@ -74,6 +75,7 @@ export type OrderGroup = {
   orderToken?: string;
   pickupName: string;
   phone: string;
+  depositorName: string;
   memo: string;
   totalAmount: number;
   paymentMethod: string;
@@ -124,6 +126,7 @@ export type AdminDashboard = {
 export type CreateOrderPayload = {
   pickupName: string;
   phone: string;
+  depositorName: string;
   memo?: string;
   items: OrderItemInput[];
 };

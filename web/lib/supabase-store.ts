@@ -16,6 +16,7 @@ import { hashAdminPin, hashOrderToken, newToken, secureEqual } from "./crypto";
 import { eq, inList, supabaseRequest } from "./supabase-rest";
 import type {
   AdminDashboard,
+  AdminRole,
   AdminSession,
   CreateOrderPayload,
   Menu,
@@ -61,6 +62,7 @@ type MenuRow = {
 
 type OrderRow = {
   id: string;
+  event_id: string;
   order_no: string;
   order_token_hash: string;
   pickup_name: string;
@@ -479,23 +481,22 @@ export async function completePickup(orderNo: string, token: string, sectionId: 
 
 export async function loginAdmin(pin: string): Promise<AdminSession> {
   const event = await getEvent();
-  const rows = await supabaseRequest<Array<{ role: "team"; team_id: string; label: string; pin_hash: string; teams?: TeamRow }>>(
-    `/rest/v1/admin_pins?event_id=${eq(event.id)}&is_active=eq.true&role=eq.team&select=role,team_id,label,pin_hash,teams(*)&limit=20`
+  const rows = await supabaseRequest<
+    Array<{ role: AdminRole; team_id: string | null; label: string; pin_hash: string; teams?: TeamRow }>
+  >(
+    `/rest/v1/admin_pins?event_id=${eq(event.id)}&is_active=eq.true&select=role,team_id,label,pin_hash,teams(*)&limit=20`
   );
   const hash = hashAdminPin(normalizeAdminPin(pin), EVENT_CODE);
   const found = rows.find((row) => secureEqual(row.pin_hash, hash));
   if (!found) {
     throw new Error("관리자 PIN이 올바르지 않습니다.");
   }
-  if (!found.team_id || !found.teams) {
-    throw new Error("관리자 팀을 찾을 수 없습니다.");
-  }
   return {
     role: found.role,
     teamId: found.team_id,
-    teamCode: found.teams.code,
-    teamName: found.teams.name,
-    label: found.label || found.teams.name || found.role,
+    teamCode: found.teams?.code ?? null,
+    teamName: found.teams?.name ?? null,
+    label: found.label || found.teams?.name || found.role,
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12
   };
 }
@@ -503,10 +504,11 @@ export async function loginAdmin(pin: string): Promise<AdminSession> {
 export async function getAdminDashboard(session: AdminSession): Promise<AdminDashboard> {
   const event = await getEvent();
   const teams = await getTeams(event.id);
-  const menus = (await getMenus(event.id)).filter((menu) => menu.teamId === session.teamId);
+  // master/admin 모두 행사 전체를 본다(단일 행사 콘솔). 역할 차이는 입금확인 권한뿐.
+  const menus = await getMenus(event.id);
   const statuses = ["PAYMENT_PENDING", "PAYMENT_CHECKING", "PAYMENT_ISSUE", "PAID", "READY", "CANCELED"];
   const sections = await supabaseRequest<SectionRow[]>(
-    `/rest/v1/order_sections?status=${inList(statuses)}&team_id=${eq(session.teamId || "")}&select=*,teams(*),orders(*)&order=created_at.asc&limit=200`
+    `/rest/v1/order_sections?status=${inList(statuses)}&select=*,teams(*),orders!inner(*)&orders.event_id=${eq(event.id)}&order=created_at.asc&limit=200`
   );
   const orderIds = Array.from(new Set(sections.map((section) => section.order_id)));
   const items = await getItems(orderIds);
@@ -524,7 +526,7 @@ export async function getAdminDashboard(session: AdminSession): Promise<AdminDas
   }, {} as Record<OrderStatus, number>);
   return {
     admin: session,
-    teams: teams.filter((team) => team.id === session.teamId),
+    teams,
     menus,
     orders,
     stats,
@@ -547,6 +549,7 @@ export async function updateOrderStatus(
   nextStatus: OrderStatus,
   adminNote: string
 ): Promise<AdminDashboard> {
+  const event = await getEvent();
   const rows = await supabaseRequest<SectionRow[]>(
     `/rest/v1/order_sections?id=${eq(sectionId)}&select=*,teams(*),orders(*)&limit=1`
   );
@@ -554,8 +557,13 @@ export async function updateOrderStatus(
   if (!section) {
     throw new Error("주문을 찾을 수 없습니다.");
   }
-  if (section.team_id !== session.teamId) {
-    throw new Error("해당 팀 주문에 접근할 수 없습니다.");
+  // 다른 행사 섹션을 ID로 조작하지 못하도록 현재 행사 소속 검증(team 스코프 제거에 따른 가드).
+  if ((section.orders as OrderRow | undefined)?.event_id !== event.id) {
+    throw new Error("해당 주문에 접근할 수 없습니다.");
+  }
+  // 입금확인(→PAID)은 master 전용. admin은 준비완료 이후 단계만 처리.
+  if (nextStatus === "PAID" && session.role !== "master") {
+    throw new Error("입금확인은 master 권한만 가능합니다.");
   }
   if (!canTransition(section.status, nextStatus)) {
     throw new Error(`${statusLabel(section.status)}에서 ${statusLabel(nextStatus)}로 변경할 수 없습니다.`);
@@ -583,9 +591,6 @@ export async function updateMenuAvailability(session: AdminSession, menuId: stri
   const menu = menus.find((item) => item.id === menuId);
   if (!menu) {
     throw new Error("메뉴를 찾을 수 없습니다.");
-  }
-  if (menu.teamId !== session.teamId) {
-    throw new Error("해당 팀 메뉴에 접근할 수 없습니다.");
   }
   await supabaseRequest(`/rest/v1/menus?id=${eq(menuId)}`, {
     method: "PATCH",

@@ -455,7 +455,7 @@ export function AdminApp() {
               <button className="btn primary full" type="button" disabled={busy === "login"} onClick={login}>
                 로그인
               </button>
-              <p className="hint-line">로컬 데모 PIN: 1111</p>
+              <p className="hint-line">로컬 데모: master 1111 / admin 2222</p>
               {error ? <p className="error">{error}</p> : null}
             </div>
           </section>
@@ -670,6 +670,10 @@ export function AdminApp() {
                       <div className="button-row order-actions">
                         {order.sections.map((section) => {
                           const action = nextAction(section.status);
+                          // 입금확인(→PAID)은 master 전용. admin에겐 버튼 숨김.
+                          if (action && action.label === "입금확인" && dashboard.admin.role !== "master") {
+                            return null;
+                          }
                           return action ? (
                             <button
                               className={`btn status-button ${statusClass(action.status)} full`}
