@@ -1,0 +1,47 @@
+---
+doc_id: sfs-project-agent-adapter-codex
+title: "AGENTS.md — frontmatter-only Codex bootstrap for Solon SFS"
+doc_type: agent-adapter-bootstrap
+agent: codex
+frontmatter_only: true
+updated: 2026-06-17
+purpose: "Thin auto-load pointer only. Do not duplicate durable SFS policy here."
+entry_contract:
+  run_sfs: "Prefer the installed SFS skill or `$sfs ...`; otherwise run `sfs <command>` or `sfs.cmd <command>` on Windows PowerShell/cmd."
+  before_planning_or_editing:
+    - SFS.md
+    - .sfs-local/VERSION
+    - .sfs-local/divisions.yaml
+    - "recent .sfs-local/sprints/ and .sfs-local/decisions/ only when state matters"
+    - "sfs context cat kernel"
+    - "sfs context cat index"
+    - "routed `sfs context cat ...` command or policy module"
+detail_sources:
+  - SFS.md
+  - .sfs-local/context/
+  - packaged-sfs-runtime-context
+  - installed SFS skill
+  - .agents/skills/sfs/
+  - .codex/prompts/sfs.md
+  - commands/sfs.toml
+  - .sfs-local/presets/solon-safe-permissions.yaml
+  - mcp-server/README.md
+  - llm-wiki/README.md                  # when present: Obsidian LLM-wiki vault entry
+  - llm-wiki/00-llm-retrieval-guide.md  # when present: wiki retrieval guide
+knowledge_wiki:                         # pointer only — wiki usage policy stays routed, never inlined here
+  status: optional-recommended          # opt-in retained (not default-on)
+  detect: ["llm-wiki/", ".obsidian/"]
+  on_present: "Check llm-wiki/README.md + llm-wiki/00-llm-retrieval-guide.md before any broad scan."
+  on_absent: "Proceed with plain docs/solon/ artifacts and record a gap/waiver."
+  ssot_policy: "sfs context cat policies/obsidian-llm-wiki"
+do_not_inline:
+  - SFS command tables
+  - model routing
+  - gates or review policy
+  - division packs
+  - wiki or release policy
+  - bkit-style Feature Usage footers
+maintenance:
+  detect_or_fix_bloat: "sfs agent doctor --fix"
+  config_review_cadence: "Review this adapter, SFS.md, installed skills/hooks/plugins, permissions, and local context overrides every 3-6 months or after a major model/runtime release."
+---

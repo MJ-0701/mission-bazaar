@@ -15,7 +15,7 @@ create type order_status as enum (
 
 create type admin_role as enum (
   'master',
-  'team'
+  'admin'
 );
 
 create table events (
@@ -54,11 +54,8 @@ create table admin_pins (
   label text not null default '',
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  check (
-    (role = 'master' and team_id is null)
-    or (role = 'team' and team_id is not null)
-  )
+  updated_at timestamptz not null default now()
+  -- master/admin은 행사 전체 권한이라 team_id 불필요(null 허용).
 );
 
 create table menus (
@@ -83,6 +80,7 @@ create table orders (
   order_token_hash text not null,
   pickup_name text not null,
   phone text not null,
+  depositor_name text not null default '',
   customer_key text not null,
   memo text not null default '',
   total_amount integer not null check (total_amount >= 0),
