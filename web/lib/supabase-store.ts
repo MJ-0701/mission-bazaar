@@ -326,7 +326,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<OrderGro
         })
       }
     );
-    await publishOrderChange();
+    void publishOrderChange();
     return mapOrder(result.order, result.sections, result.items, token);
   } catch (error) {
     // RPC 미적용(마이그레이션 전)이면 기존 4-왕복 경로로 폴백 — 무중단 롤아웃
@@ -412,7 +412,7 @@ async function createOrderLegacy(payload: CreateOrderPayload, token: string): Pr
     body: JSON.stringify(itemRows)
   });
 
-  await publishOrderChange();
+  void publishOrderChange();
   return mapOrder(order, sections, items, token);
 }
 
@@ -430,7 +430,7 @@ export async function markPaymentChecking(orderNo: string, token: string): Promi
   });
   const sections = await getSections([order.id]);
   const items = await getItems([order.id]);
-  await publishOrderChange();
+  void publishOrderChange();
   return mapOrder(order, sections, items, token);
 }
 
@@ -480,7 +480,7 @@ export async function completePickup(orderNo: string, token: string, sectionId: 
       status_updated_by: "customer"
     })
   });
-  await publishOrderChange();
+  void publishOrderChange();
   return getPickupSnapshot(orderNo, token);
 }
 
@@ -587,7 +587,7 @@ export async function updateOrderStatus(
       status_updated_by: session.label
     })
   });
-  await publishOrderChange();
+  void publishOrderChange();
   return getAdminDashboard(session);
 }
 
@@ -603,6 +603,6 @@ export async function updateMenuAvailability(session: AdminSession, menuId: stri
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ is_available: isAvailable })
   });
-  await publishOrderChange();
+  void publishOrderChange();
   return getAdminDashboard(session);
 }
