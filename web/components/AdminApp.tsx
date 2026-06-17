@@ -62,9 +62,10 @@ function statusClass(status: OrderStatus) {
 }
 
 function orderCreatedAsc(a: OrderSection, b: OrderSection) {
+  // FIFO: 단조 증가하는 주문번호(sequence 기반) 우선 정렬. createdAt은 동시생성 tie라 보조로만.
   return (
-    a.createdAt.localeCompare(b.createdAt) ||
     a.orderNo.localeCompare(b.orderNo, "ko", { numeric: true }) ||
+    a.createdAt.localeCompare(b.createdAt) ||
     a.teamName.localeCompare(b.teamName, "ko")
   );
 }
@@ -116,7 +117,7 @@ function groupOrderSections(sections: OrderSection[]): VisibleOrderGroup[] {
   }
 
   return Array.from(groups.values()).sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.orderNo.localeCompare(b.orderNo, "ko", { numeric: true })
+    (a, b) => a.orderNo.localeCompare(b.orderNo, "ko", { numeric: true }) || a.createdAt.localeCompare(b.createdAt)
   );
 }
 
