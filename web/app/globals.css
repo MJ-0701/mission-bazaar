@@ -2319,13 +2319,14 @@ a {
   }
   /* 액션 버튼: 한 줄 흐름(flex)으로 높이 절약. 특이도 높여 다른 규칙 위에. */
   .admin-order-list .order-card .order-actions {
-    display: flex;
+    display: flex !important;
+    grid-template-columns: none !important;
     flex-wrap: wrap;
     gap: 6px;
   }
   .admin-order-list .order-card .order-actions .btn {
-    flex: 1 1 90px;
-    width: auto;
+    flex: 1 1 90px !important;
+    width: auto !important;
     min-width: 0;
     min-height: 38px;
     padding: 0 8px;
