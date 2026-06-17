@@ -637,28 +637,34 @@ export function AdminApp() {
                             <strong>{order.phone}</strong>
                           </p>
                         </div>
-                        <div className="receipt-item-groups">
-                          {itemGroups.map((group) => (
-                            <section className="receipt-item-group" key={`${order.id}-${group.category}`}>
-                              <div className="receipt-group-head">
-                                <strong>{group.category}</strong>
-                                <span>
-                                  {group.quantity}개 · {formatWon(group.subtotal)}
-                                </span>
-                              </div>
-                              {group.items.map(({ section, item }) => (
-                                <div className="receipt-item-row" key={item.id}>
-                                  <div>
-                                    <strong>{item.menuName}</strong>
-                                    <span>{section.teamName}</span>
-                                  </div>
-                                  <span>x {item.quantity}</span>
-                                  <strong>{formatWon(item.subtotal)}</strong>
-                                </div>
-                              ))}
-                            </section>
-                          ))}
+                        <div className="receipt-items-compact">
+                          {order.items.map(({ item }) => `${item.menuName}×${item.quantity}`).join(" · ")}
                         </div>
+                        <details className="receipt-toggle">
+                          <summary>상세 내역 ({itemQuantity}개)</summary>
+                          <div className="receipt-item-groups">
+                            {itemGroups.map((group) => (
+                              <section className="receipt-item-group" key={`${order.id}-${group.category}`}>
+                                <div className="receipt-group-head">
+                                  <strong>{group.category}</strong>
+                                  <span>
+                                    {group.quantity}개 · {formatWon(group.subtotal)}
+                                  </span>
+                                </div>
+                                {group.items.map(({ section, item }) => (
+                                  <div className="receipt-item-row" key={item.id}>
+                                    <div>
+                                      <strong>{item.menuName}</strong>
+                                      <span>{section.teamName}</span>
+                                    </div>
+                                    <span>x {item.quantity}</span>
+                                    <strong>{formatWon(item.subtotal)}</strong>
+                                  </div>
+                                ))}
+                              </section>
+                            ))}
+                          </div>
+                        </details>
                         <div className="receipt-total-line">
                           <span>합계</span>
                           <strong>{formatWon(order.subtotalAmount)}</strong>
