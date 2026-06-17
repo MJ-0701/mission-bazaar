@@ -389,6 +389,10 @@ export async function updateOrderStatus(
   if (["PAID", "PAYMENT_ISSUE", "PAYMENT_CHECKING"].includes(nextStatus) && session.role !== "master") {
     throw new Error("입금 관련 처리는 master 권한만 가능합니다.");
   }
+  // 손님 '입금했어요' 전(PENDING)엔 입금확인 불가.
+  if (nextStatus === "PAID" && section.status === "PAYMENT_PENDING") {
+    throw new Error("손님이 '입금했어요'를 누른 뒤(입금 확인 중) 입금확인할 수 있습니다.");
+  }
   if (!canTransition(section.status, nextStatus)) {
     throw new Error(`${section.statusLabel}에서 ${statusLabel(nextStatus)}로 변경할 수 없습니다.`);
   }

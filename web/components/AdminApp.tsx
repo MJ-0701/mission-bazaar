@@ -80,13 +80,11 @@ function primaryStatus(sections: OrderSection[]) {
   return [...sections].sort((a, b) => statusRank(a.status) - statusRank(b.status))[0]?.status || "PAYMENT_PENDING";
 }
 
-// 입금 대조가 필요한(아직 입금확인 전) 상태 — 생성 즉시(PENDING)부터 노출/대조 대상.
+// 입금확인 액션 대상(손님이 '입금했어요' 누른 뒤) — 강조/대조/알림/뱃지 기준.
+// PENDING(손님 입금 전)은 목록엔 보이지만 액션 대상 아님.
 function awaitingDeposit(sections: OrderSection[]) {
   return sections.some(
-    (section) =>
-      section.status === "PAYMENT_PENDING" ||
-      section.status === "PAYMENT_CHECKING" ||
-      section.status === "PAYMENT_ISSUE"
+    (section) => section.status === "PAYMENT_CHECKING" || section.status === "PAYMENT_ISSUE"
   );
 }
 
@@ -231,7 +229,7 @@ export function AdminApp() {
   }
 
   function detectNewDeposits(data: AdminDashboard) {
-    // 새 주문(입금 대기 포함)이 큐에 들어오면 알림 — 돈이 먼저 들어오는 흐름에서 즉시 인지.
+    // 손님이 '입금했어요' 누른 주문(입금 확인 중)이 들어오면 알림 — 입금확인 액션 필요 신호.
     const checking = data.orders.filter((section) => awaitingDeposit([section]));
     const currentIds = new Set(checking.map((section) => section.id));
     if (!firstLoadRef.current) {
@@ -420,7 +418,7 @@ export function AdminApp() {
   // 노출 순서는 무조건 시간 ASC 선입선출(FIFO). 미확인 강조는 색/대조블록으로만, 순서는 안 바꿈.
   const visibleOrderGroups = useMemo(() => groupOrderSections(visibleOrders), [visibleOrders]);
   const activeOrderCount = (dashboard?.orders || []).filter((order) => order.status !== "CANCELED").length;
-  // 입금 대조 대기(입금확인 전) 건수 — 생성 즉시(PENDING)부터 카운트.
+  // 입금확인 액션 대기(손님 입금했어요 누른 '입금 확인 중') 건수.
   const awaitingCount = (dashboard?.orders || []).filter((order) => awaitingDeposit([order])).length;
   const stockGroups = useMemo(() => groupMenusForStock(dashboard?.menus || []), [dashboard?.menus]);
 
@@ -704,9 +702,24 @@ export function AdminApp() {
                       <div className="button-row order-actions">
                         {order.sections.map((section) => {
                           const action = nextAction(section.status);
-                          // 입금확인(→PAID)은 master 전용. admin에겐 버튼 숨김.
-                          if (action && action.label === "입금확인" && dashboard.admin.role !== "master") {
-                            return null;
+                          if (action && action.label === "입금확인") {
+                            // 입금 관련 = master 전용. admin에겐 버튼 숨김.
+                            if (dashboard.admin.role !== "master") {
+                              return null;
+                            }
+                            // PENDING(손님 '입금했어요' 전)은 입금확인 불가 — 비활성 표시.
+                            if (section.status === "PAYMENT_PENDING") {
+                              return (
+                                <button
+                                  className="btn status-button full"
+                                  type="button"
+                                  disabled
+                                  key={`${section.id}-waitpay`}
+                                >
+                                  {order.sections.length > 1 ? `${section.teamName} 손님 입금 전` : "손님 입금 전"}
+                                </button>
+                              );
+                            }
                           }
                           return action ? (
                             <button
