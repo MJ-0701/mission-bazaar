@@ -656,7 +656,7 @@ export function AdminApp() {
                               </div>
                             </div>
                             {dupNameCount > 1 ? (
-                              <p className="dup-warning">⚠️ 같은 입금자명 {dupNameCount}건 — 금액으로 구분하세요</p>
+                              <p className="dup-warning">⚠️ 같은 입금자명 {dupNameCount}건 — 입금 메모의 주문번호로 구분</p>
                             ) : null}
                           </div>
                         ) : null}
@@ -890,7 +890,7 @@ export function AdminApp() {
         <div className={`undo-toast ${undoToast.dup ? "undo-toast-warn" : ""}`} role="status">
           <span>
             {undoToast.orderNo} 입금확인 완료
-            {undoToast.dup ? " · ⚠️ 동명이인 — 금액 확인" : ""}
+            {undoToast.dup ? " · ⚠️ 동명 — 주문번호 확인" : ""}
           </span>
           <button type="button" onClick={undoPaid}>
             실행취소

@@ -445,7 +445,6 @@ export async function getPickupSnapshot(orderNo: string, token: string): Promise
   const items = await getItems(orderIds);
   const orderMap = new Map(orderRows.map((row) => [row.id, row]));
   const sectionDtos = sections
-    .filter((section) => section.status !== "CANCELED")
     .map((section) => mapSection(section, orderMap.get(section.order_id) || order, items))
     .sort((a, b) => {
       const statusDiff = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
