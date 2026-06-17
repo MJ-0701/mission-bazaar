@@ -441,8 +441,10 @@ export function AdminApp() {
                 <label htmlFor="pin">PIN</label>
                 <input
                   id="pin"
-                  inputMode="numeric"
-                  placeholder="1111"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="PIN 입력"
                   value={pin}
                   onChange={(event) => setPin(event.target.value)}
                   onKeyDown={(event) => {
