@@ -462,9 +462,14 @@ export async function getPickupSnapshot(orderNo: string, token: string): Promise
 export async function completePickup(orderNo: string, token: string, sectionId: string): Promise<PickupSnapshot> {
   const event = await getEvent();
   const order = await assertOrderAccess(event.id, orderNo, token);
-  const sections = await getSections([order.id]);
-  const section = sections.find((item) => item.id === sectionId);
-  if (!section) {
+  // 픽업 화면은 같은 손님(customer_key)의 여러 주문을 함께 보여줌 → URL 주문이 아닌
+  // 섹션도 수령완료 가능해야 함. 섹션의 소속 주문이 같은 손님인지 검증.
+  const sectionRows = await supabaseRequest<SectionRow[]>(
+    `/rest/v1/order_sections?id=${eq(sectionId)}&select=*,teams(*),orders(*)&limit=1`
+  );
+  const section = sectionRows[0];
+  const sectionOrder = section?.orders as OrderRow | undefined;
+  if (!section || !sectionOrder || sectionOrder.event_id !== event.id || sectionOrder.customer_key !== order.customer_key) {
     throw new Error("주문 섹션을 찾을 수 없습니다.");
   }
   if (section.status !== "READY" && section.status !== "COMPLETE") {
