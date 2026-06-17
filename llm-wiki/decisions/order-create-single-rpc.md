@@ -54,6 +54,15 @@ related:
 - 적용 전(폴백/4왕복) 100 동시: p95 2.9~4.3s.
 - 적용 후(단일 RPC) 100 동시: **TODO — SQL 적용 후 재측정해 갱신**.
 
+## Codex 크로스리뷰 증거 (base=main)
+
+- **accepted P2** — RPC가 중복 menuId 미집계 → 메뉴당 99 상한 우회 가능. 수정: `_li`에서 menu_id 합산 후 1..99 검증, 메뉴당 1행 insert.
+- **accepted P3** — `changeStatus`가 에러를 삼켜 입금확정 실패에도 실행취소 토스트 노출. 수정: 성공여부 반환 → 성공 시에만 토스트.
+- **accepted P1** — `orders.depositor_name`이 트랙된 schema.sql에 없음(prod엔 존재). 수정: schema.sql에 컬럼 반영.
+- **deferred** — seed.example.sql 구팀(yeongju/jeju) 미비활성화. 기존 이슈·이번 변경 무관·prod 무영향 → 별도 처리.
+
+커밋: `051aef6`. 검증: typecheck 통과 + 폴백 경로 prod E2E. RPC 적용 후 100동시 재측정 예정.
+
 ## 운영 메모
 
 - 적용: Supabase SQL Editor에서 `migration/create-order-rpc.sql` 1회 실행.
