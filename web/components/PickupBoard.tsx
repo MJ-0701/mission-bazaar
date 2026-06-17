@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatWon } from "@/lib/domain";
+import { subscribeOrders, type RealtimeHandle } from "@/lib/realtime-client";
 import type { PickupSnapshot } from "@/lib/types";
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -100,8 +101,34 @@ export function PickupBoard({ orderNo, token }: { orderNo: string; token: string
     }
 
     refresh(false, nextAccess);
-    const timer = window.setInterval(() => refresh(true, nextAccess), 1000);
-    return () => window.clearInterval(timer);
+    // 실시간(broadcast) + 폴링 백업. 실시간 연결 시 폴링 느슨(6s), 실패 시 1s.
+    let active = true;
+    let pollMs = 1000;
+    let timer = window.setInterval(() => refresh(true, nextAccess), pollMs);
+    let handle: RealtimeHandle | null = null;
+    const setPoll = (ms: number) => {
+      if (ms === pollMs) {
+        return;
+      }
+      pollMs = ms;
+      window.clearInterval(timer);
+      timer = window.setInterval(() => refresh(true, nextAccess), pollMs);
+    };
+    subscribeOrders(
+      () => refresh(true, nextAccess),
+      (connected) => setPoll(connected ? 6000 : 1000)
+    ).then((h) => {
+      if (!active) {
+        h?.close();
+        return;
+      }
+      handle = h;
+    });
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      handle?.close();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderNo, token]);
 
