@@ -172,8 +172,7 @@ export function AdminApp() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [cancelDraft, setCancelDraft] = useState<{ sectionId: string; reason: string } | null>(null);
-  const [payConfirm, setPayConfirm] = useState<{ sectionId: string } | null>(null);
-  const [undoToast, setUndoToast] = useState<{ section: OrderSection; orderNo: string } | null>(null);
+  const [undoToast, setUndoToast] = useState<{ section: OrderSection; orderNo: string; dup: boolean } | null>(null);
   const [soundOn, setSoundOn] = useState(true);
 
   const undoTimerRef = useRef<number | null>(null);
@@ -348,17 +347,16 @@ export function AdminApp() {
     }
   }
 
-  // 입금확인 = 원탭 즉시 확정 후 5초간 실행취소 토스트 노출(모달 피로 제거).
-  async function confirmPaid(section: OrderSection, orderNo: string) {
-    setPayConfirm(null);
+  // 입금확인 = 무조건 원탭 즉시 확정(모달 없음, 절차 안 밀림). 동명이인은 토스트로 인지만.
+  async function confirmPaid(section: OrderSection, orderNo: string, dup = false) {
     const ok = await changeStatus(section, "PAID");
     if (!ok) {
-      return; // 입금확정 실패 시 토스트/실행취소 노출 안 함
+      return; // 실패 시 토스트/실행취소 노출 안 함
     }
     if (undoTimerRef.current) {
       window.clearTimeout(undoTimerRef.current);
     }
-    setUndoToast({ section, orderNo });
+    setUndoToast({ section, orderNo, dup });
     undoTimerRef.current = window.setTimeout(() => setUndoToast(null), 5000);
   }
 
@@ -624,9 +622,6 @@ export function AdminApp() {
                   const cancelSection = cancelDraft
                     ? order.sections.find((section) => section.id === cancelDraft.sectionId)
                     : null;
-                  const paySection = payConfirm
-                    ? order.sections.find((section) => section.id === payConfirm.sectionId)
-                    : null;
                   return (
                     <article
                       className={`order-card ${statusClass(status)} ${needsConfirm ? "needs-confirm" : ""}`}
@@ -720,9 +715,7 @@ export function AdminApp() {
                               key={`${section.id}-${action.status}`}
                               onClick={() =>
                                 action.label === "입금확인"
-                                  ? dupNameCount > 1
-                                    ? setPayConfirm({ sectionId: section.id })
-                                    : confirmPaid(section, order.orderNo)
+                                  ? confirmPaid(section, order.orderNo, dupNameCount > 1)
                                   : changeStatus(section, action.status)
                               }
                             >
@@ -825,45 +818,6 @@ export function AdminApp() {
                           </div>
                         </div>
                       ) : null}
-                      {payConfirm && paySection ? (
-                        <div className="cancel-confirm pay-confirm">
-                          <div>
-                            <strong>입금 확인</strong>
-                            <p>통장에서 실제 입금을 확인한 뒤 확정하세요.</p>
-                          </div>
-                          <div className="pay-confirm-facts">
-                            <div>
-                              <span>입금자명</span>
-                              <strong>{order.depositorName || "-"}</strong>
-                            </div>
-                            <div>
-                              <span>입금액</span>
-                              <strong>{formatWon(order.subtotalAmount)}</strong>
-                            </div>
-                          </div>
-                          {dupNameCount > 1 ? (
-                            <p className="dup-warning">⚠️ 같은 입금자명 {dupNameCount}건 — 금액 일치 꼭 확인</p>
-                          ) : null}
-                          <div className="button-row">
-                            <button
-                              className="btn full"
-                              type="button"
-                              disabled={busy === paySection.id}
-                              onClick={() => setPayConfirm(null)}
-                            >
-                              돌아가기
-                            </button>
-                            <button
-                              className="btn status-button status-paid full"
-                              type="button"
-                              disabled={busy === paySection.id}
-                              onClick={() => confirmPaid(paySection, order.orderNo)}
-                            >
-                              통장 확인함 · 입금확정
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
                     </article>
                   );
                 })
@@ -918,8 +872,11 @@ export function AdminApp() {
       </main>
 
       {undoToast ? (
-        <div className="undo-toast" role="status">
-          <span>{undoToast.orderNo} 입금확인 완료</span>
+        <div className={`undo-toast ${undoToast.dup ? "undo-toast-warn" : ""}`} role="status">
+          <span>
+            {undoToast.orderNo} 입금확인 완료
+            {undoToast.dup ? " · ⚠️ 동명이인 — 금액 확인" : ""}
+          </span>
           <button type="button" onClick={undoPaid}>
             실행취소
           </button>
