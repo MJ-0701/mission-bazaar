@@ -80,8 +80,14 @@ function primaryStatus(sections: OrderSection[]) {
   return [...sections].sort((a, b) => statusRank(a.status) - statusRank(b.status))[0]?.status || "PAYMENT_PENDING";
 }
 
+// 입금 대조가 필요한(아직 입금확인 전) 상태 — 생성 즉시(PENDING)부터 노출/대조 대상.
 function awaitingDeposit(sections: OrderSection[]) {
-  return sections.some((section) => section.status === "PAYMENT_CHECKING");
+  return sections.some(
+    (section) =>
+      section.status === "PAYMENT_PENDING" ||
+      section.status === "PAYMENT_CHECKING" ||
+      section.status === "PAYMENT_ISSUE"
+  );
 }
 
 function groupStatusText(sections: OrderSection[]) {
@@ -225,7 +231,8 @@ export function AdminApp() {
   }
 
   function detectNewDeposits(data: AdminDashboard) {
-    const checking = data.orders.filter((section) => section.status === "PAYMENT_CHECKING");
+    // 새 주문(입금 대기 포함)이 큐에 들어오면 알림 — 돈이 먼저 들어오는 흐름에서 즉시 인지.
+    const checking = data.orders.filter((section) => awaitingDeposit([section]));
     const currentIds = new Set(checking.map((section) => section.id));
     if (!firstLoadRef.current) {
       const fresh = checking.some((section) => !checkingIdsRef.current.has(section.id));
@@ -396,11 +403,6 @@ export function AdminApp() {
         if (filter === "ALL" && order.status === "CANCELED") {
           return false;
         }
-        // 헛주문 방지: 입금의사 표시 전(입금 대기) 드래프트는 기본 큐에서 숨김.
-        // '입금 대기' 상태카드를 직접 누르면(filter=PAYMENT_PENDING) 조회 가능(입금했는데 미클릭 대비).
-        if (filter === "ALL" && order.status === "PAYMENT_PENDING") {
-          return false;
-        }
         if (filter !== "ALL" && order.status !== filter) {
           return false;
         }
@@ -417,10 +419,9 @@ export function AdminApp() {
   }, [dashboard, filter, query, teamFilter]);
   // 노출 순서는 무조건 시간 ASC 선입선출(FIFO). 미확인 강조는 색/대조블록으로만, 순서는 안 바꿈.
   const visibleOrderGroups = useMemo(() => groupOrderSections(visibleOrders), [visibleOrders]);
-  // 전체(기본 큐) 카운트: 취소 + 입금의사 전 드래프트(PAYMENT_PENDING) 제외 — 목록과 일치.
-  const activeOrderCount = (dashboard?.orders || []).filter(
-    (order) => order.status !== "CANCELED" && order.status !== "PAYMENT_PENDING"
-  ).length;
+  const activeOrderCount = (dashboard?.orders || []).filter((order) => order.status !== "CANCELED").length;
+  // 입금 대조 대기(입금확인 전) 건수 — 생성 즉시(PENDING)부터 카운트.
+  const awaitingCount = (dashboard?.orders || []).filter((order) => awaitingDeposit([order])).length;
   const stockGroups = useMemo(() => groupMenusForStock(dashboard?.menus || []), [dashboard?.menus]);
 
   // 동명이인 감지: 미확인(입금대기·확인중·문제) 주문 중 같은 입금자명이 몇 건인지(주문번호 기준 distinct).
@@ -520,8 +521,8 @@ export function AdminApp() {
           </div>
           <div className="button-row" style={{ marginTop: 0 }}>
             {dashboard.demoMode ? <span className="badge warning">데모 모드</span> : null}
-            {dashboard.stats.PAYMENT_CHECKING ? (
-              <span className="badge alert-badge">입금확인 대기 {dashboard.stats.PAYMENT_CHECKING}</span>
+            {awaitingCount ? (
+              <span className="badge alert-badge">입금확인 대기 {awaitingCount}</span>
             ) : null}
             <button className="btn" type="button" onClick={toggleSound} aria-pressed={soundOn}>
               {soundOn ? "🔔 알림 켜짐" : "🔕 알림 꺼짐"}
