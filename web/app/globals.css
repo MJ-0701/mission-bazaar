@@ -340,7 +340,8 @@ a {
 
 .menu-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* 너비에 따라 자동 다열: 폰 1열, 태블릿/iPad·데스크탑 2열+ (브레이크포인트 없이 유동) */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 8px;
 }
 
