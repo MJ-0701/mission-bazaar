@@ -2317,14 +2317,13 @@ a {
   .receipt-toggle > summary {
     font-size: 0.76rem;
   }
-  /* 액션 버튼: 한 줄 흐름(flex)으로 높이 절약 */
-  .order-actions {
+  /* 액션 버튼: 한 줄 흐름(flex)으로 높이 절약. 특이도 높여 다른 규칙 위에. */
+  .admin-order-list .order-card .order-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
-  .order-actions .btn,
-  .order-actions .btn.full {
+  .admin-order-list .order-card .order-actions .btn {
     flex: 1 1 90px;
     width: auto;
     min-width: 0;
