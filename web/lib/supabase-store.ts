@@ -8,6 +8,7 @@ import {
   canTransition,
   normalizeAdminPin,
   normalizeCustomerKey,
+  normalizePhone,
   sanitizeText,
   statusLabel
 } from "./domain";
@@ -64,6 +65,7 @@ type OrderRow = {
   order_token_hash: string;
   pickup_name: string;
   phone: string;
+  depositor_name: string;
   customer_key: string;
   memo: string;
   total_amount: number;
@@ -164,6 +166,7 @@ function mapSection(row: SectionRow, order: OrderRow, items: ItemRow[]): OrderSe
     subtotalAmount: row.subtotal_amount,
     pickupName: order.pickup_name,
     phone: order.phone,
+    depositorName: order.depositor_name || "",
     memo: order.memo || "",
     adminNote: row.admin_note || "",
     createdAt: row.created_at,
@@ -180,6 +183,7 @@ function mapOrder(order: OrderRow, sections: SectionRow[], items: ItemRow[], tok
     orderToken: token,
     pickupName: order.pickup_name,
     phone: order.phone,
+    depositorName: order.depositor_name || "",
     memo: order.memo || "",
     totalAmount: order.total_amount,
     paymentMethod: order.payment_method,
@@ -257,10 +261,31 @@ export async function getPublicBootstrap(): Promise<PublicBootstrap> {
   };
 }
 
+function extractPgMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "";
+  }
+  try {
+    const body = JSON.parse(error.message);
+    if (body && typeof body.message === "string") {
+      return body.message;
+    }
+  } catch {
+    // PostgREST 형식이 아니면 원문 노출하지 않음
+  }
+  return "";
+}
+
+function isMissingRpc(error: unknown): boolean {
+  // create_order RPC 미적용(마이그레이션 전): PostgREST는 PGRST202(함수 없음)로 응답
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("PGRST202");
+}
+
 export async function createOrder(payload: CreateOrderPayload): Promise<OrderGroup> {
-  const event = await getEvent();
   const pickupName = sanitizeText(payload.pickupName, 40);
-  const phone = sanitizeText(payload.phone, 30);
+  const phone = normalizePhone(String(payload.phone ?? "")).slice(0, 20);
+  const depositorName = sanitizeText(payload.depositorName, 40);
   const memo = sanitizeText(payload.memo, 300);
   if (!pickupName) {
     throw new Error("픽업자명을 입력해주세요.");
@@ -268,10 +293,55 @@ export async function createOrder(payload: CreateOrderPayload): Promise<OrderGro
   if (!phone) {
     throw new Error("연락처를 입력해주세요.");
   }
+  if (!depositorName) {
+    throw new Error("입금하실 분(예금주) 성함을 입력해주세요.");
+  }
+
+  const items = (payload.items || [])
+    .map((item) => ({ menu_id: item.menuId, quantity: Math.floor(Number(item.quantity) || 0) }))
+    .filter((item) => item.menu_id && item.quantity > 0);
+  if (!items.length) {
+    throw new Error("메뉴를 선택해주세요.");
+  }
+
+  const token = newToken();
+  try {
+    // 빠른 경로: 단일 RPC = 카운터+order+sections+items 한 트랜잭션/한 왕복
+    const result = await supabaseRequest<{ order: OrderRow; sections: SectionRow[]; items: ItemRow[] }>(
+      `/rest/v1/rpc/create_order`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          p_event_code: EVENT_CODE,
+          p_pickup_name: pickupName,
+          p_phone: phone,
+          p_depositor_name: depositorName,
+          p_customer_key: normalizeCustomerKey(pickupName, phone),
+          p_memo: memo,
+          p_token_hash: hashOrderToken(token),
+          p_items: items
+        })
+      }
+    );
+    return mapOrder(result.order, result.sections, result.items, token);
+  } catch (error) {
+    // RPC 미적용(마이그레이션 전)이면 기존 4-왕복 경로로 폴백 — 무중단 롤아웃
+    if (isMissingRpc(error)) {
+      return createOrderLegacy(payload, token);
+    }
+    throw new Error(extractPgMessage(error) || "주문 생성에 실패했습니다.");
+  }
+}
+
+async function createOrderLegacy(payload: CreateOrderPayload, token: string): Promise<OrderGroup> {
+  const event = await getEvent();
+  const pickupName = sanitizeText(payload.pickupName, 40);
+  const phone = normalizePhone(String(payload.phone ?? "")).slice(0, 20);
+  const depositorName = sanitizeText(payload.depositorName, 40);
+  const memo = sanitizeText(payload.memo, 300);
 
   const menus = await getMenus(event.id);
   const lines = buildOrderLines(payload.items, menus);
-  const token = newToken();
   const orderNo = await supabaseRequest<string>(`/rest/v1/rpc/next_order_no`, {
     method: "POST",
     body: JSON.stringify({ target_event_code: EVENT_CODE })
@@ -286,6 +356,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<OrderGro
       order_token_hash: hashOrderToken(token),
       pickup_name: pickupName,
       phone,
+      depositor_name: depositorName,
       customer_key: normalizeCustomerKey(pickupName, phone),
       memo,
       total_amount: totalAmount,
@@ -408,20 +479,23 @@ export async function completePickup(orderNo: string, token: string, sectionId: 
 
 export async function loginAdmin(pin: string): Promise<AdminSession> {
   const event = await getEvent();
-  const rows = await supabaseRequest<Array<{ role: "master" | "team"; team_id: string | null; label: string; pin_hash: string; teams?: TeamRow }>>(
-    `/rest/v1/admin_pins?event_id=${eq(event.id)}&is_active=eq.true&select=role,team_id,label,pin_hash,teams(*)&limit=20`
+  const rows = await supabaseRequest<Array<{ role: "team"; team_id: string; label: string; pin_hash: string; teams?: TeamRow }>>(
+    `/rest/v1/admin_pins?event_id=${eq(event.id)}&is_active=eq.true&role=eq.team&select=role,team_id,label,pin_hash,teams(*)&limit=20`
   );
   const hash = hashAdminPin(normalizeAdminPin(pin), EVENT_CODE);
   const found = rows.find((row) => secureEqual(row.pin_hash, hash));
   if (!found) {
     throw new Error("관리자 PIN이 올바르지 않습니다.");
   }
+  if (!found.team_id || !found.teams) {
+    throw new Error("관리자 팀을 찾을 수 없습니다.");
+  }
   return {
     role: found.role,
     teamId: found.team_id,
-    teamCode: found.teams?.code || null,
-    teamName: found.teams?.name || null,
-    label: found.label || found.teams?.name || found.role,
+    teamCode: found.teams.code,
+    teamName: found.teams.name,
+    label: found.label || found.teams.name || found.role,
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 12
   };
 }
@@ -429,11 +503,10 @@ export async function loginAdmin(pin: string): Promise<AdminSession> {
 export async function getAdminDashboard(session: AdminSession): Promise<AdminDashboard> {
   const event = await getEvent();
   const teams = await getTeams(event.id);
-  const menus = (await getMenus(event.id)).filter((menu) => session.role === "master" || menu.teamId === session.teamId);
+  const menus = (await getMenus(event.id)).filter((menu) => menu.teamId === session.teamId);
   const statuses = ["PAYMENT_PENDING", "PAYMENT_CHECKING", "PAYMENT_ISSUE", "PAID", "READY", "CANCELED"];
-  const teamFilter = session.role === "master" ? "" : `&team_id=${eq(session.teamId || "")}`;
   const sections = await supabaseRequest<SectionRow[]>(
-    `/rest/v1/order_sections?status=${inList(statuses)}${teamFilter}&select=*,teams(*),orders(*)&order=created_at.asc&limit=200`
+    `/rest/v1/order_sections?status=${inList(statuses)}&team_id=${eq(session.teamId || "")}&select=*,teams(*),orders(*)&order=created_at.asc&limit=200`
   );
   const orderIds = Array.from(new Set(sections.map((section) => section.order_id)));
   const items = await getItems(orderIds);
@@ -451,7 +524,7 @@ export async function getAdminDashboard(session: AdminSession): Promise<AdminDas
   }, {} as Record<OrderStatus, number>);
   return {
     admin: session,
-    teams: teams.filter((team) => session.role === "master" || team.id === session.teamId),
+    teams: teams.filter((team) => team.id === session.teamId),
     menus,
     orders,
     stats,
@@ -481,7 +554,7 @@ export async function updateOrderStatus(
   if (!section) {
     throw new Error("주문을 찾을 수 없습니다.");
   }
-  if (session.role !== "master" && section.team_id !== session.teamId) {
+  if (section.team_id !== session.teamId) {
     throw new Error("해당 팀 주문에 접근할 수 없습니다.");
   }
   if (!canTransition(section.status, nextStatus)) {
@@ -511,7 +584,7 @@ export async function updateMenuAvailability(session: AdminSession, menuId: stri
   if (!menu) {
     throw new Error("메뉴를 찾을 수 없습니다.");
   }
-  if (session.role !== "master" && menu.teamId !== session.teamId) {
+  if (menu.teamId !== session.teamId) {
     throw new Error("해당 팀 메뉴에 접근할 수 없습니다.");
   }
   await supabaseRequest(`/rest/v1/menus?id=${eq(menuId)}`, {
