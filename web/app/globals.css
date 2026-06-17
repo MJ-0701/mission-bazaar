@@ -120,8 +120,9 @@ a {
 }
 
 .customer-topbar {
-  background: rgba(251, 251, 253, 0.9);
-  backdrop-filter: saturate(180%) blur(18px);
+  /* backdrop-filter blur 제거: sticky 헤더 blur가 모바일에서 상호작용마다 비싼 재페인트 → 렉 유발.
+     불투명 배경으로 대체(시각 거의 동일, 성능 큰 개선). */
+  background: #fbfbfd;
 }
 
 .customer-topbar .topbar-inner {
