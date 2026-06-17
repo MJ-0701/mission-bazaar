@@ -692,9 +692,10 @@ export function AdminApp() {
                             </button>
                           ) : null;
                         })}
-                        {order.sections
-                          .filter((section) => section.status === "PAYMENT_CHECKING")
-                          .map((section) => (
+                        {dashboard.admin.role === "master" &&
+                          order.sections
+                            .filter((section) => section.status === "PAYMENT_CHECKING")
+                            .map((section) => (
                             <button
                               className="btn status-button status-payment-issue full"
                               type="button"
@@ -705,9 +706,10 @@ export function AdminApp() {
                               {order.sections.length > 1 ? `${section.teamName} 입금문제` : "입금문제"}
                             </button>
                           ))}
-                        {order.sections
-                          .filter((section) => section.status === "CANCELED")
-                          .map((section) => (
+                        {dashboard.admin.role === "master" &&
+                          order.sections
+                            .filter((section) => section.status === "CANCELED")
+                            .map((section) => (
                             <button
                               className="btn status-button status-payment-checking full"
                               type="button"

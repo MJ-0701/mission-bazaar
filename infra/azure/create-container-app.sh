@@ -52,11 +52,14 @@ if az containerapp show \
       supabase-service-role-key="${SUPABASE_SERVICE_ROLE_KEY}" \
     --output none
 
-  if [[ ${#registry_args[@]} -gt 0 ]]; then
+  if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
+    # 주의: registry set 서브커맨드는 --server (create/update는 --registry-server).
     az containerapp registry set \
       --name "${CONTAINER_APP_NAME}" \
       --resource-group "${RESOURCE_GROUP}" \
-      "${registry_args[@]}" \
+      --server ghcr.io \
+      --username "${GHCR_USERNAME}" \
+      --password "${GHCR_TOKEN}" \
       --output none
   fi
 
