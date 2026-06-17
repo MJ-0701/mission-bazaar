@@ -623,25 +623,20 @@ export function AdminApp() {
                             ) : null}
                           </div>
                         ) : null}
-                        <div className="receipt-info-grid">
-                          <p>
-                            <span>입금자</span>
-                            <strong>{order.depositorName || "-"}</strong>
-                          </p>
-                          <p>
-                            <span>픽업자</span>
-                            <strong>{order.pickupName}</strong>
-                          </p>
-                          <p>
-                            <span>연락처</span>
-                            <strong>{order.phone}</strong>
-                          </p>
+                        <div className="menu-chips">
+                          {order.items.map(({ item }) => (
+                            <span className="menu-chip" key={item.id}>
+                              {item.menuName}
+                              <b>{item.quantity}</b>
+                            </span>
+                          ))}
                         </div>
-                        <div className="receipt-items-compact">
-                          {order.items.map(({ item }) => `${item.menuName}×${item.quantity}`).join(" · ")}
-                        </div>
+                        <p className="contact-line">
+                          픽업 {order.pickupName} · {order.phone}
+                          {!needsConfirm && order.depositorName ? ` · 입금 ${order.depositorName}` : ""}
+                        </p>
                         <details className="receipt-toggle">
-                          <summary>상세 내역 ({itemQuantity}개)</summary>
+                          <summary>상세 내역 ({itemQuantity}개 · {formatWon(order.subtotalAmount)})</summary>
                           <div className="receipt-item-groups">
                             {itemGroups.map((group) => (
                               <section className="receipt-item-group" key={`${order.id}-${group.category}`}>
@@ -665,15 +660,7 @@ export function AdminApp() {
                             ))}
                           </div>
                         </details>
-                        <div className="receipt-total-line">
-                          <span>합계</span>
-                          <strong>{formatWon(order.subtotalAmount)}</strong>
-                        </div>
-                        {order.memo ? (
-                          <div className="info-box" style={{ marginTop: 12 }}>
-                            {order.memo}
-                          </div>
-                        ) : null}
+                        {order.memo ? <div className="order-memo">{order.memo}</div> : null}
                       </div>
                       <div className="button-row order-actions">
                         {order.sections.map((section) => {

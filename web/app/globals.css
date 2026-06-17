@@ -1314,6 +1314,49 @@ a {
   word-break: keep-all;
 }
 
+/* 메뉴 칩: 주문 내용 한눈에 (조리 대상) */
+.menu-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.menu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--fg);
+  word-break: keep-all;
+}
+
+.menu-chip b {
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.contact-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  word-break: keep-all;
+}
+
+.order-memo {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: var(--fg-soft);
+}
+
 .receipt-toggle > summary {
   cursor: pointer;
   list-style: none;
