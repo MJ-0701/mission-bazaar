@@ -60,7 +60,7 @@ export function CustomerOrderApp() {
   const totalAmount = selectedLines.reduce((sum, line) => sum + line.subtotal, 0);
   const totalQuantity = selectedLines.reduce((sum, line) => sum + line.quantity, 0);
   const selectedCategoryNames = Array.from(new Set(selectedLines.map((line) => menuCategoryLabel(line.menu.category))));
-  const groupedMenus = groupMenusByCategory(menus);
+  const groupedMenus = useMemo(() => groupMenusByCategory(menus), [menus]);
   const accountNumber = bootstrap?.settings.accountNumber?.trim() || "";
   const accountDisplay = [
     bootstrap?.settings.bankName || "은행명",
